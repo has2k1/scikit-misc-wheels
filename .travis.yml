@@ -16,6 +16,8 @@ python: 3.5
 sudo: required
 dist: trusty
 services: docker
+git:
+  depth: 3
 
 matrix:
   exclude:
@@ -71,7 +73,7 @@ matrix:
 
 before_install:
     - BUILD_DEPENDS="$NP_BUILD_DEP Cython"
-    - TEST_DEPENDS="$NP_TEST_DEP pytest"
+    - TEST_DEPENDS="$NP_TEST_DEP pytest-cov"
     - source multibuild/common_utils.sh
     - source multibuild/travis_steps.sh
     - before_install

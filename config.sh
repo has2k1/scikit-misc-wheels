@@ -12,5 +12,8 @@ function run_tests {
     # Runs tests on installed distribution from an empty directory
     python --version
     pushd ../scikit-misc
+    ls -la skmisc
+    ls -la skmisc/loess
+    ls -la skmisc/loess/src
     pytest
 }
