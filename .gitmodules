@@ -1,0 +1,6 @@
+[submodule "multibuild"]
+	path = multibuild
+	url = https://github.com/matthew-brett/multibuild.git
+[submodule "scikit-misc"]
+	path = scikit-misc
+	url = https://github.com/has2k1/scikit-misc.git
