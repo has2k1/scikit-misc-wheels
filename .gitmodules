@@ -4,3 +4,6 @@
 [submodule "scikit-misc"]
 	path = scikit-misc
 	url = https://github.com/has2k1/scikit-misc.git
+[submodule "gfortran-install"]
+	path = gfortran-install
+	url = https://github.com/MacPython/gfortran-install
