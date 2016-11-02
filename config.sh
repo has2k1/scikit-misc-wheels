@@ -78,9 +78,19 @@ function build_osx_wheel {
 function run_tests {
     # Runs tests on installed distribution from an empty directory
     python --version
-    pushd ../scikit-misc
-    ls -la skmisc
-    ls -la skmisc/loess
-    ls -la skmisc/loess/src
-    pytest
+    pwd
+    ls -la
+    # test_cmd="import sys, skmisc; sys.exit(skmisc.test())"
+    test_cmd="import skmisc; "
+
+    if [ -n "$IS_OSX" ]; then
+        # Test both architectures on OSX
+        arch -i386 python -c "$test_cmd"
+        arch -x86_64 python -c "$test_cmd"
+    else
+        # python -c "$test_cmd"
+        pip list
+    fi
+
+    # python -c "import skmisc; skmisc.show_config()"
 }
