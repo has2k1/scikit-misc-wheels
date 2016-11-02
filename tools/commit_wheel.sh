@@ -8,16 +8,18 @@ set -e # Exit with nonzero exit code if anything fails
 TOP_LEVEL=`git rev-parse --show-toplevel`
 SOURCE_BRANCH="master"
 TARGET_BRANCH="wheelhouse"
+COMMIT_AUTHOR_NAME=$(git --no-pager show -s --format='%an')
+COMMIT_AUTHOR_EMAIL=$(git --no-pager show -s --format='%ae')
 ENCRYPTED_DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key.enc"
 DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key"
 # Commits are assembled in the working directory
 WORKING_DIR="$TRAVIS_BUILD_DIR/commit_wheel_activity"
 # where the build script put the wheel(s)
-BUILT_WHEELS_DIRECTORY="$TRAVIS_BUILD_DIR/wheelhouse"
+WHEELHOUSE_DIRECTORY="$TRAVIS_BUILD_DIR/wheelhouse"
 TARGET_BRANCH_DIRECTORY="$WORKING_DIR/$TARGET_BRANCH"
 BUILD_ID="$(date +%Y-%m-%d:%H:%M)--${BUILD_COMMIT}"
 # where the wheels for this build will be committed
-WHEELHOUSE_DIRECTORY="$TARGET_BRANCH_DIRECTORY/$BUILD_ID"
+WHEEL_COMMIT_DIRECTORY="$TARGET_BRANCH_DIRECTORY/$BUILD_ID"
 
 # Get the deploy key by using Travis's stored variables to decrypt deploy_key.enc
 ENCRYPTED_KEY_VAR="encrypted_${ENCRYPTION_LABEL}_key"
@@ -50,19 +52,20 @@ else
    git reset --hard
 fi
 
-if [[ -d $BUILT_WHEELS_DIRECTORY ]]; then
-   mkdir $BUILT_WHEELS_DIRECTORY
+if [[ ! -d $WHEEL_COMMIT_DIRECTORY ]]; then
+   mkdir $WHEEL_COMMIT_DIRECTORY
 fi
 
 # Copy the wheels
-cp -a "$BUILT_WHEELS_DIRECTORY/." "$WHEELHOUSE_DIRECTORY/"
+cp -a "$WHEELHOUSE_DIRECTORY/." "$WHEEL_COMMIT_DIRECTORY/"
 
 # Now let's go have some fun with the cloned repo
-git config user.name "Travis CI"
+git config user.name "$COMMIT_AUTHOR_NAME via Travis CI"
 git config user.email "$COMMIT_AUTHOR_EMAIL"
+git config --local -l
 
 # Track and commit
-git add "$WHEELHOUSE_DIRECTORY/"
+git add "$WHEEL_COMMIT_DIRECTORY/"
 
 # If there are no changes to the compiled out (e.g. this is a README update) then just bail.
 if [ -z `git diff --cached --exit-code --shortstat` ]; then
