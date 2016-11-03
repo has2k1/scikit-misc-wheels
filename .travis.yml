@@ -16,8 +16,15 @@ python: 3.5
 sudo: required
 dist: trusty
 services: docker
+
 git:
   depth: 3
+
+notifications:
+   email:
+      on_success: change
+      on_failure: change
+
 
 matrix:
   exclude:

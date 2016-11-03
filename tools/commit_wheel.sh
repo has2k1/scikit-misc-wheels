@@ -18,10 +18,16 @@ BUILD_MATRIX_SIZE=9
 WORKING_DIR="/tmp/commit_wheel"
 # where the build script put the wheel(s)
 WHEELHOUSE_DIRECTORY="$TRAVIS_BUILD_DIR/wheelhouse"
-TARGET_BRANCH_DIRECTORY="$WORKING_DIR/$TARGET_BRANCH"
-BUILD_ID="$(date +%Y-%m-%d:%H:%M)--${BUILD_COMMIT}"
+LOCAL_REPO="$WORKING_DIR/$TARGET_BRANCH"
+
+# Process the filename of the wheel to get the version
+# For the filename convention, see PEP 427
+wheel_filename=$(ls $WHEELHOUSE_DIRECTORY -1 | head -n 1)
+IFS='-' read -a tokens <<< $wheel_filename
+WHEEL_VERSION=${tokens[1]}
 # where the wheels for this build will be committed
-WHEEL_COMMIT_DIRECTORY="$TARGET_BRANCH_DIRECTORY/$BUILD_ID"
+WHEEL_COMMIT_DIRECTORY=$WHEEL_VERSION
+COMMIT_MSG="$(date +%Y-%m-%d:%H:%M:%S)--${WHEEL_VERSION}"
 
 # Get the deploy key by using Travis's stored variables to decrypt deploy_key.enc
 ENCRYPTED_KEY_VAR="encrypted_${ENCRYPTION_LABEL}_key"
@@ -38,7 +44,8 @@ SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
 # try to push again.
 function push_pull_rebase {
    N=$BUILD_MATRIX_SIZE
-   PUSH_CMD="git push $SSH_REPO $TARGET_BRANCH"
+   git branch -a
+   PUSH_CMD="git push origin $TARGET_BRANCH:$TARGET_BRANCH"
 
    for i in {1..$N}; do
       # Command does not fail, script does not exit
@@ -47,9 +54,14 @@ function push_pull_rebase {
       if [[ $error_code -eq 0 ]]; then
          break
       elif [[ ! $i -eq $N ]]; then
+         # Staggering the re-pushes over some time
+         # should reduce the potential for conflicts
+         sleep "$((1 + RANDOM % $N*2))s"
+
          # One of the other parallel builds beat this
          # build to the update, so commit goes on top
-         git pull --rebase=True origin/$TARGET_BRANCH
+         git branch -a
+         git pull --rebase=true origin $TARGET_BRANCH
       else
          echo "$PUSH_CMD -- FAILED"
          exit 1
@@ -64,18 +76,17 @@ chmod 600 $DEPLOY_KEY_FILE
 eval `ssh-agent -s`
 ssh-add $DEPLOY_KEY_FILE
 
-
 mkdir $WORKING_DIR
 
 # Clone the existing wheelhouse for this repo into out/
 # Create a new empty branch if gh-pages doesn't exist
 # yet (should only happen on first deply)
-git clone --depth=3 --branch=$TARGET_BRANCH $SSH_REPO $TARGET_BRANCH_DIRECTORY || true
-if [[ -d $TARGET_BRANCH_DIRECTORY ]]; then
-   pushd $TARGET_BRANCH_DIRECTORY
+git clone --depth=3 --branch=$TARGET_BRANCH $SSH_REPO $LOCAL_REPO || true
+if [[ -d $LOCAL_REPO ]]; then
+   pushd $LOCAL_REPO
 else
-   git clone -l -s -n . $TARGET_BRANCH_DIRECTORY
-   pushd $TARGET_BRANCH_DIRECTORY
+   git clone -l -s -n . $LOCAL_REPO
+   pushd $LOCAL_REPO
    git checkout $TARGET_BRANCH || git checkout --orphan $TARGET_BRANCH
    git reset --hard
 fi
@@ -101,7 +112,7 @@ if [ -z `git diff --cached --exit-code --shortstat` ]; then
     exit 0
 fi
 
-git commit -m "$BUILD_ID"
+git commit -m "$COMMIT_MSG"
 
 push_pull_rebase
 
