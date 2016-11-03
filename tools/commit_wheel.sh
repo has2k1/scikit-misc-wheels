@@ -44,10 +44,10 @@ SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
 # try to push again.
 function push_pull_rebase {
    N=$BUILD_MATRIX_SIZE
-   git branch -a
+   cat .git/config
    PUSH_CMD="git push origin $TARGET_BRANCH:$TARGET_BRANCH"
 
-   for i in {1..$N}; do
+   for (( i=1; i<=$N; i++ )); do
       # Command does not fail, script does not exit
       # yet we still get the error code. :)
       error_code=$(eval $PUSH_CMD || echo $?)
@@ -60,7 +60,6 @@ function push_pull_rebase {
 
          # One of the other parallel builds beat this
          # build to the update, so commit goes on top
-         git branch -a
          git pull --rebase=true origin $TARGET_BRANCH
       else
          echo "$PUSH_CMD -- FAILED"
@@ -87,6 +86,11 @@ if [[ -d $LOCAL_REPO ]]; then
 else
    git clone -l -s -n . $LOCAL_REPO
    pushd $LOCAL_REPO
+   # We cloned a local repository, but the wheels will be
+   # pushed to a new branch in the remote repository.
+   # That remote (SSH_REPO) should be the origin.
+   git remote remove origin
+   git remote add origin $SSH_REPO
    git checkout $TARGET_BRANCH || git checkout --orphan $TARGET_BRANCH
    git reset --hard
 fi
