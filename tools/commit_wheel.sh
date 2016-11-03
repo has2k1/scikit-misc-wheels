@@ -12,8 +12,10 @@ COMMIT_AUTHOR_NAME=$(git --no-pager show -s --format='%an')
 COMMIT_AUTHOR_EMAIL=$(git --no-pager show -s --format='%ae')
 ENCRYPTED_DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key.enc"
 DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key"
+# No of entries in the matrix.include section of .travis.yml
+BUILD_MATRIX_SIZE=9
 # Commits are assembled in the working directory
-WORKING_DIR="$TRAVIS_BUILD_DIR/commit_wheel_activity"
+WORKING_DIR="/tmp/commit_wheel"
 # where the build script put the wheel(s)
 WHEELHOUSE_DIRECTORY="$TRAVIS_BUILD_DIR/wheelhouse"
 TARGET_BRANCH_DIRECTORY="$WORKING_DIR/$TARGET_BRANCH"
@@ -26,6 +28,35 @@ ENCRYPTED_KEY_VAR="encrypted_${ENCRYPTION_LABEL}_key"
 ENCRYPTED_IV_VAR="encrypted_${ENCRYPTION_LABEL}_iv"
 ENCRYPTED_KEY=${!ENCRYPTED_KEY_VAR}
 ENCRYPTED_IV=${!ENCRYPTED_IV_VAR}
+
+# Save some useful information
+REPO=`git config remote.origin.url`
+SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
+
+# Hack. When the builds compete to update the remote origin,
+# some pushes may fail. In that case we pull-rebase and then
+# try to push again.
+function push_pull_rebase {
+   N=$BUILD_MATRIX_SIZE
+   PUSH_CMD="git push $SSH_REPO $TARGET_BRANCH"
+
+   for i in {1..$N}; do
+      # Command does not fail, script does not exit
+      # yet we still get the error code. :)
+      error_code=$(eval $PUSH_CMD || echo $?)
+      if [[ $error_code -eq 0 ]]; then
+         break
+      elif [[ ! $i -eq $N ]]; then
+         # One of the other parallel builds beat this
+         # build to the update, so commit goes on top
+         git pull --rebase=True origin/$TARGET_BRANCH
+      else
+         echo "$PUSH_CMD -- FAILED"
+         exit 1
+      fi
+   done
+}
+
 openssl aes-256-cbc -K $ENCRYPTED_KEY -iv $ENCRYPTED_IV \
    -in $ENCRYPTED_DEPLOY_KEY_FILE -out $DEPLOY_KEY_FILE -d
 
@@ -33,11 +64,8 @@ chmod 600 $DEPLOY_KEY_FILE
 eval `ssh-agent -s`
 ssh-add $DEPLOY_KEY_FILE
 
-mkdir $WORKING_DIR
 
-# Save some useful information
-REPO=`git config remote.origin.url`
-SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
+mkdir $WORKING_DIR
 
 # Clone the existing wheelhouse for this repo into out/
 # Create a new empty branch if gh-pages doesn't exist
@@ -75,8 +103,7 @@ fi
 
 git commit -m "$BUILD_ID"
 
-# Now that we're all set up, we can push.
-git push $SSH_REPO $TARGET_BRANCH
+push_pull_rebase
 
 popd
 rm -rf $WORKING_DIRECTORY
