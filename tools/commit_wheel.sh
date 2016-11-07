@@ -4,9 +4,8 @@
 # Credit: https://gist.github.com/domenic/ec8b0fc8ab45f39403dd
 set -o xtrace  # Print command traces before executing command
 set -e # Exit with nonzero exit code if anything fails
+echo $BASH_VERSION  # For debugging
 
-TOP_LEVEL=`git rev-parse --show-toplevel`
-SOURCE_BRANCH="master"
 TARGET_BRANCH="wheelhouse"
 COMMIT_AUTHOR_NAME=$(git --no-pager show -s --format='%an')
 COMMIT_AUTHOR_EMAIL=$(git --no-pager show -s --format='%ae')
@@ -22,9 +21,9 @@ LOCAL_REPO="$WORKING_DIR/$TARGET_BRANCH"
 
 # Process the filename of the wheel to get the version
 # For the filename convention, see PEP 427
-wheel_filename=$(ls $WHEELHOUSE_DIRECTORY -1 | head -n 1)
-IFS='-' read -a tokens <<< $wheel_filename
-WHEEL_VERSION=${tokens[1]}
+wheel_filename=$(ls -1 $WHEELHOUSE_DIRECTORY | head -n 1)
+WHEEL_VERSION=$(echo $wheel_filename | cut -d '-' -f 2)
+
 # where the wheels for this build will be committed
 WHEEL_COMMIT_DIRECTORY=$WHEEL_VERSION
 COMMIT_MSG="$(date +%Y-%m-%d:%H:%M:%S)--${WHEEL_VERSION}"
@@ -44,7 +43,6 @@ SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
 # try to push again.
 function push_pull_rebase {
    N=$BUILD_MATRIX_SIZE
-   cat .git/config
    PUSH_CMD="git push origin $TARGET_BRANCH:$TARGET_BRANCH"
 
    for (( i=1; i<=$N; i++ )); do

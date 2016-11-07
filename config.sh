@@ -50,6 +50,7 @@ function build_osx_wheel {
     local wheelhouse32=${wheelhouse}32
 
     install_gfortran
+
     # 32-bit wheel
     local arch="-m32"
     set_arch $arch
@@ -61,6 +62,7 @@ function build_osx_wheel {
     export LDFLAGS="$arch $py_ld_flags"
     build_pip_wheel "$repo_dir"
     mv ${wheelhouse}/*whl $wheelhouse32
+
     # 64-bit wheel
     local arch="-m64"
     set_arch $arch
@@ -69,6 +71,7 @@ function build_osx_wheel {
     export LDSHARED="$CC $py_ld_flags"
     export LDFLAGS="$arch $py_ld_flags"
     build_pip_wheel "$repo_dir"
+
     # Fuse into dual arch wheel(s)
     for whl in ${wheelhouse}/*.whl; do
         delocate-fuse "$whl" "${wheelhouse32}/$(basename $whl)"
@@ -78,19 +81,16 @@ function build_osx_wheel {
 function run_tests {
     # Runs tests on installed distribution from an empty directory
     python --version
-    pwd
-    ls -la
-    # test_cmd="import sys, skmisc; sys.exit(skmisc.test())"
-    test_cmd="import skmisc; "
+    pip list
+    test_cmd="import sys, skmisc; sys.exit(skmisc.test())"
 
     if [ -n "$IS_OSX" ]; then
         # Test both architectures on OSX
         arch -i386 python -c "$test_cmd"
         arch -x86_64 python -c "$test_cmd"
     else
-        # python -c "$test_cmd"
-        pip list
+        python -c "$test_cmd"
     fi
 
-    # python -c "import skmisc; skmisc.show_config()"
+    python -c "import skmisc; skmisc.show_config()"
 }
