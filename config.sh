@@ -16,7 +16,7 @@ function build_wheel {
         build_libs $PLAT
         # build_pip_wheel does not work with versioneer
         # https://github.com/matthew-brett/multibuild/issues/11
-        build_bdist_wheel $@
+        build_pip_wheel $@
     else
         build_osx_wheel $@
     fi
@@ -62,11 +62,8 @@ function build_osx_wheel {
     mkdir -p $wheelhouse32
     export LDSHARED="$CC $py_ld_flags"
     export LDFLAGS="$arch $py_ld_flags"
-    build_bdist_wheel "$repo_dir"
+    build_pip_wheel "$repo_dir"
     mv ${wheelhouse}/*whl $wheelhouse32
-
-    # cleaup
-    rm -f "$repo_dir/cythonize.dat"
 
     # 64-bit wheel
     local arch="-m64"
@@ -75,7 +72,7 @@ function build_osx_wheel {
     # Build wheel
     export LDSHARED="$CC $py_ld_flags"
     export LDFLAGS="$arch $py_ld_flags"
-    build_bdist_wheel "$repo_dir"
+    build_pip_wheel "$repo_dir"
 
     # Fuse into dual arch wheel(s)
     for whl in ${wheelhouse}/*.whl; do

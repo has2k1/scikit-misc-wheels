@@ -1,6 +1,8 @@
 [submodule "multibuild"]
 	path = multibuild
-	url = https://github.com/matthew-brett/multibuild.git
+	# url = https://github.com/matthew-brett/multibuild.git
+	url = https://github.com/has2k1/multibuild.git
+        branch = fix-pip-wheel-versioneer
 [submodule "scikit-misc"]
 	path = scikit-misc
 	url = https://github.com/has2k1/scikit-misc.git
