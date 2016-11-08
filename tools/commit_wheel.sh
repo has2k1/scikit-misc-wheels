@@ -26,7 +26,7 @@ WHEEL_VERSION=$(echo $wheel_filename | cut -d '-' -f 2)
 
 # where the wheels for this build will be committed
 WHEEL_COMMIT_DIRECTORY=$WHEEL_VERSION
-COMMIT_MSG="$(date +%Y-%m-%d:%H:%M:%S)--${WHEEL_VERSION}"
+COMMIT_MSG="${WHEEL_VERSION} ($(date +%Y-%m-%d:%H:%M:%S))"
 
 # Get the deploy key by using Travis's stored variables to decrypt deploy_key.enc
 ENCRYPTED_KEY_VAR="encrypted_${ENCRYPTION_LABEL}_key"
