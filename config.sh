@@ -8,6 +8,10 @@ function pre_build {
     # Any stuff that you need to do before you start building the wheels
     # Runs in the root directory of this repository.
     :
+    # Bug Fix
+    # https://github.com/matthew-brett/multibuild/issues/163
+    # https://github.com/SHTOOLS/SHTOOLS/issues/149
+    unset FFLAGS
 }
 
 # From https://github.com/MacPython/scipy-wheels
