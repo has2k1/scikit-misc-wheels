@@ -31,6 +31,7 @@ matrix:
       # Exclude the default Python 3.5 build
       - python: 3.5
   include:
+    # linux 2.7
     - os: linux
       env:
         - MB_PYTHON_VERSION=2.7
@@ -47,6 +48,7 @@ matrix:
         - MB_PYTHON_VERSION=2.7
         - PLAT=i686
         - UNICODE_WIDTH=16
+    # linux 3.5
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.5
@@ -58,6 +60,7 @@ matrix:
         - PLAT=i686
         - NP_BUILD_DEP=numpy==1.9.3
         - NP_TEST_DEP=numpy==1.9.3
+    # linux 3.6
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.6
@@ -69,6 +72,19 @@ matrix:
         - PLAT=i686
         - NP_BUILD_DEP=numpy==1.11.3
         - NP_TEST_DEP=numpy==1.11.3
+    # linux 3.7
+    - os: linux
+      env:
+        - MB_PYTHON_VERSION=3.7
+        - NP_BUILD_DEP=numpy==1.15.0
+        - NP_TEST_DEP=numpy==1.15.0
+    - os: linux
+      env:
+        - MB_PYTHON_VERSION=3.7
+        - PLAT=i686
+        - NP_BUILD_DEP=numpy==1.15.0
+        - NP_TEST_DEP=numpy==1.15.0
+    # OSX 2.7, 3.5, 3.6, 3.7
     - os: osx
       language: generic
       env:
@@ -85,6 +101,12 @@ matrix:
         - MB_PYTHON_VERSION=3.6
         - NP_BUILD_DEP=numpy==1.11.3
         - NP_TEST_DEP=numpy==1.11.3
+    - os: osx
+      language: generic
+      env:
+        - MB_PYTHON_VERSION=3.7
+        - NP_BUILD_DEP=numpy==1.15.0
+        - NP_TEST_DEP=numpy==1.15.0
 
 before_install:
     - BUILD_DEPENDS="$NP_BUILD_DEP Cython"
