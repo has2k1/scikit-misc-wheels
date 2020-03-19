@@ -1,19 +1,23 @@
+# To update this file refer to
+#   https://github.com/MacPython/scipy-wheels/blob/master/.travis.yml
 env:
     global:
         - REPO_DIR=scikit-misc
         - BUILD_COMMIT=v0.1.1
         - PLAT=x86_64
-        - NP_BUILD_DEP="numpy==1.7.1"
-        - NP_TEST_DEP="numpy==1.7.1"
+        - NP_BUILD_DEP="numpy==1.13.3"
+        - NP_TEST_DEP="numpy==1.13.3"
+        - CYTHON_BUILD_DEP="Cython==0.29.14"
+        - PYBIND11_BUILD_DEP="pybind11==2.4.3"
         - UNICODE_WIDTH=32
         - WHEELHOUSE_UPLOADER_USERNAME=travis-worker
         - ENCRYPTION_LABEL=44495d7cff01
 
+os: linux
 language: python
 # The travis Python version is unrelated to the version we build and test
 # with.  This is set with the MB_PYTHON_VERSION variable.
 python: 3.5
-sudo: required
 dist: trusty
 services: docker
 
@@ -25,92 +29,74 @@ notifications:
       on_success: change
       on_failure: change
 
-
-matrix:
-  exclude:
-      # Exclude the default Python 3.5 build
-      - python: 3.5
+jobs:
   include:
-    # linux 2.7
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=2.7
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=2.7
-        - UNICODE_WIDTH=16
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=2.7
-        - PLAT=i686
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=2.7
-        - PLAT=i686
-        - UNICODE_WIDTH=16
-    # linux 3.5
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=3.5
-        - NP_BUILD_DEP=numpy==1.9.3
-        - NP_TEST_DEP=numpy==1.9.3
-    - os: linux
-      env:
-        - MB_PYTHON_VERSION=3.5
-        - PLAT=i686
-        - NP_BUILD_DEP=numpy==1.9.3
-        - NP_TEST_DEP=numpy==1.9.3
-    # linux 3.6
+    # linux, Python 3.6, 3.7, 3.8
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.6
-        - NP_BUILD_DEP=numpy==1.11.3
-        - NP_TEST_DEP=numpy==1.11.3
+        - NP_BUILD_DEP=numpy==1.13.3
+        - NP_TEST_DEP=numpy==1.13.3
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.6
         - PLAT=i686
-        - NP_BUILD_DEP=numpy==1.11.3
-        - NP_TEST_DEP=numpy==1.11.3
-    # linux 3.7
+        - NP_BUILD_DEP=numpy==1.13.3
+        - NP_TEST_DEP=numpy==1.13.3
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.7
-        - NP_BUILD_DEP=numpy==1.15.0
-        - NP_TEST_DEP=numpy==1.15.0
+        - NP_BUILD_DEP=numpy==1.14.5
+        - NP_TEST_DEP=numpy==1.14.5
+        - CYTHON_BUILD_DEP="Cython"
     - os: linux
       env:
         - MB_PYTHON_VERSION=3.7
         - PLAT=i686
-        - NP_BUILD_DEP=numpy==1.15.0
-        - NP_TEST_DEP=numpy==1.15.0
-    # OSX 2.7, 3.5, 3.6, 3.7
-    - os: osx
-      language: generic
+        - NP_BUILD_DEP=numpy==1.14.5
+        - NP_TEST_DEP=numpy==1.14.5
+        - CYTHON_BUILD_DEP="Cython"
+    - os: linux
       env:
-        - MB_PYTHON_VERSION=2.7
-    - os: osx
-      language: generic
+        - MB_PYTHON_VERSION=3.8
+        - NP_BUILD_DEP=numpy==1.17.3
+        - NP_TEST_DEP=numpy==1.17.3
+        - CYTHON_BUILD_DEP="Cython"
+    - os: linux
       env:
-        - MB_PYTHON_VERSION=3.5
-        - NP_BUILD_DEP=numpy==1.9.3
-        - NP_TEST_DEP=numpy==1.9.3
+        - MB_PYTHON_VERSION=3.8
+        - PLAT=i686
+        - NP_BUILD_DEP=numpy==1.17.3
+        - NP_TEST_DEP=numpy==1.17.3
+        - CYTHON_BUILD_DEP="Cython"
+
+    # OSX, Python 3.6, 3.7, 3.8
     - os: osx
       language: generic
       env:
         - MB_PYTHON_VERSION=3.6
-        - NP_BUILD_DEP=numpy==1.11.3
-        - NP_TEST_DEP=numpy==1.11.3
+        - NP_BUILD_DEP=numpy==1.13.3
+        - NP_TEST_DEP=numpy==1.13.3
     - os: osx
       language: generic
       env:
         - MB_PYTHON_VERSION=3.7
-        - NP_BUILD_DEP=numpy==1.15.0
-        - NP_TEST_DEP=numpy==1.15.0
+        - NP_BUILD_DEP=numpy==1.14.5
+        - NP_TEST_DEP=numpy==1.14.5
+        - CYTHON_BUILD_DEP="Cython"
+    - os: osx
+      language: generic
+      osx_image: xcode10.1
+      env:
+        - MB_PYTHON_VERSION=3.8
+        - NP_BUILD_DEP=numpy==1.17.3
+        - NP_TEST_DEP=numpy==1.17.3
+        - CYTHON_BUILD_DEP="Cython"
+        - MB_PYTHON_OSX_VER=10.9
 
 before_install:
-    - BUILD_DEPENDS="$NP_BUILD_DEP Cython"
-    - TEST_DEPENDS="$NP_TEST_DEP pytest-cov"
+    - BUILD_DEPENDS="$NP_BUILD_DEP $CYTHON_BUILD_DEP $PYBIND11_BUILD_DEP"
+    - TEST_DEPENDS="$NP_TEST_DEP pytest pytest-xdist pytest-faulthandler pytest-env"
     - source multibuild/common_utils.sh
     - source multibuild/travis_steps.sh
     - before_install
