@@ -11,7 +11,7 @@ env:
         - PYBIND11_BUILD_DEP="pybind11==2.4.3"
         - UNICODE_WIDTH=32
         - WHEELHOUSE_UPLOADER_USERNAME=travis-worker
-        - ENCRYPTION_LABEL=44495d7cff01
+        - ENCRYPTION_LABEL=189e52c2c347
 
 os: linux
 language: python
