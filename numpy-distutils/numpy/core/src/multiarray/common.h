@@ -5,6 +5,7 @@
 #include <numpy/npy_cpu.h>
 #include <numpy/ndarraytypes.h>
 #include <limits.h>
+#include "npy_import.h"
 
 #define error_converting(x)  (((x) == -1) && PyErr_Occurred())
 
@@ -49,7 +50,7 @@ NPY_NO_EXPORT PyArray_Descr *
 _array_find_python_scalar_type(PyObject *op);
 
 NPY_NO_EXPORT PyArray_Descr *
-_array_typedescr_fromstr(char *str);
+_array_typedescr_fromstr(char const *str);
 
 NPY_NO_EXPORT char *
 index2ptr(PyArrayObject *mp, npy_intp i);
@@ -61,7 +62,7 @@ NPY_NO_EXPORT npy_bool
 _IsWriteable(PyArrayObject *ap);
 
 NPY_NO_EXPORT PyObject *
-convert_shape_to_string(npy_intp n, npy_intp *vals, char *ending);
+convert_shape_to_string(npy_intp n, npy_intp const *vals, char *ending);
 
 /*
  * Sets ValueError with "matrices not aligned" message for np.dot and friends
@@ -148,13 +149,9 @@ check_and_adjust_axis_msg(int *axis, int ndim, PyObject *msg_prefix)
         static PyObject *AxisError_cls = NULL;
         PyObject *exc;
 
+        npy_cache_import("numpy.core._exceptions", "AxisError", &AxisError_cls);
         if (AxisError_cls == NULL) {
-            PyObject *mod = PyImport_ImportModule("numpy.core._exceptions");
-
-            if (mod != NULL) {
-                AxisError_cls = PyObject_GetAttrString(mod, "AxisError");
-                Py_DECREF(mod);
-            }
+            return -1;
         }
 
         /* Invoke the AxisError constructor */
@@ -235,7 +232,7 @@ npy_uint_alignment(int itemsize)
         default:
             break;
     }
-    
+
     return alignment;
 }
 
@@ -303,7 +300,11 @@ blas_stride(npy_intp stride, unsigned itemsize)
      */
     if (stride > 0 && npy_is_aligned((void *)stride, itemsize)) {
         stride /= itemsize;
+#ifndef HAVE_BLAS_ILP64
         if (stride <= INT_MAX) {
+#else
+        if (stride <= NPY_MAX_INT64) {
+#endif
             return stride;
         }
     }
@@ -314,7 +315,11 @@ blas_stride(npy_intp stride, unsigned itemsize)
  * Define a chunksize for CBLAS. CBLAS counts in integers.
  */
 #if NPY_MAX_INTP > INT_MAX
-# define NPY_CBLAS_CHUNK  (INT_MAX / 2 + 1)
+# ifndef HAVE_BLAS_ILP64
+#  define NPY_CBLAS_CHUNK  (INT_MAX / 2 + 1)
+# else
+#  define NPY_CBLAS_CHUNK  (NPY_MAX_INT64 / 2 + 1)
+# endif
 #else
 # define NPY_CBLAS_CHUNK  NPY_MAX_INTP
 #endif
@@ -334,4 +339,14 @@ NPY_NO_EXPORT PyArrayObject *
 new_array_for_sum(PyArrayObject *ap1, PyArrayObject *ap2, PyArrayObject* out,
                   int nd, npy_intp dimensions[], int typenum, PyArrayObject **result);
 
+
+/*
+ * Used to indicate a broadcast axis, see also `npyiter_get_op_axis` in
+ * `nditer_constr.c`.  This may be the preferred API for reduction axes
+ * probably. So we should consider making this public either as a macro or
+ * function (so that the way we flag the axis can be changed).
+ */
+#define NPY_ITER_REDUCTION_AXIS(axis) (axis + (1 << (NPY_BITSOF_INT - 2)))
+
 #endif
+

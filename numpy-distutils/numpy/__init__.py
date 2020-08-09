@@ -79,7 +79,9 @@ test
 show_config
     Show numpy build configuration
 dual
-    Overwrite certain functions with high-performance Scipy tools
+    Overwrite certain functions with high-performance SciPy tools.
+    Note: `numpy.dual` is deprecated.  Use the functions from NumPy or Scipy
+    directly instead of importing them from `numpy.dual`.
 matlib
     Make everything matrices.
 __version__
@@ -104,8 +106,6 @@ available as array methods, i.e. ``x = np.array([1,2,3]); x.sort()``.
 Exceptions to this rule are documented.
 
 """
-from __future__ import division, absolute_import, print_function
-
 import sys
 import warnings
 
@@ -136,6 +136,9 @@ else:
     __all__ = ['ModuleDeprecationWarning',
                'VisibleDeprecationWarning']
 
+    # mapping of {name: (value, deprecation_msg)}
+    __deprecated_attrs__ = {}
+
     # Allow distributors to run custom init code
     from . import _distributor_init
 
@@ -143,7 +146,8 @@ else:
     from .core import *
     from . import compat
     from . import lib
-    # FIXME: why have numpy.lib if everything is imported here??
+    # NOTE: to be revisited following future namespace cleanup.
+    # See gh-14454 and gh-15672 for discussion.
     from .lib import *
 
     from . import linalg
@@ -154,27 +158,53 @@ else:
     from . import ma
     from . import matrixlib as _mat
     from .matrixlib import *
-    from .compat import long
 
-    # Make these accessible from numpy name-space
-    # but not imported in from numpy import *
-    if sys.version_info[0] >= 3:
-        from builtins import bool, int, float, complex, object, str
-        unicode = str
-    else:
-        from __builtin__ import bool, int, float, complex, object, unicode, str
+    # Deprecations introduced in NumPy 1.20.0, 2020-06-06
+    import builtins as _builtins
+    __deprecated_attrs__.update({
+        n: (
+            getattr(_builtins, n),
+            "`np.{n}` is a deprecated alias for the builtin `{n}`. "
+            "Use `{n}` by itself, which is identical in behavior, to silence "
+            "this warning. "
+            "If you specifically wanted the numpy scalar type, use `np.{n}_` "
+            "here."
+            .format(n=n)
+        )
+        for n in ["bool", "int", "float", "complex", "object", "str"]
+    })
+    __deprecated_attrs__.update({
+        n: (
+            getattr(compat, n),
+            "`np.{n}` is a deprecated alias for `np.compat.{n}`. "
+            "Use `np.compat.{n}` by itself, which is identical in behavior, "
+            "to silence this warning. "
+            "In the likely event your code does not need to work on Python 2 "
+            "you can use the builtin ``{n2}`` for which ``np.compat.{n}`` is "
+            "itself an alias. "
+            "If you specifically wanted the numpy scalar type, use `np.{n2}_` "
+            "here."
+            .format(n=n, n2=n2)
+        )
+        for n, n2 in [("long", "int"), ("unicode", "str")]
+    })
 
     from .core import round, abs, max, min
     # now that numpy modules are imported, can initialize limits
     core.getlimits._register_known_types()
 
-    __all__.extend(['bool', 'int', 'float', 'complex', 'object', 'unicode',
-                    'str'])
     __all__.extend(['__version__', 'show_config'])
     __all__.extend(core.__all__)
     __all__.extend(_mat.__all__)
     __all__.extend(lib.__all__)
     __all__.extend(['linalg', 'fft', 'random', 'ctypeslib', 'ma'])
+
+    # These are exported by np.core, but are replaced by the builtins below
+    # remove them to ensure that we don't end up with `np.long == np.int_`,
+    # which would be a breaking change.
+    del long, unicode
+    __all__.remove('long')
+    __all__.remove('unicode')
 
     # Remove things that are in the numpy.lib but not in the numpy namespace
     # Note that there is a test (numpy/tests/test_public_api.py:test_numpy_namespace)
@@ -195,33 +225,48 @@ else:
     numarray = 'removed'
 
     if sys.version_info[:2] >= (3, 7):
-        # Importing Tester requires importing all of UnitTest which is not a
-        # cheap import Since it is mainly used in test suits, we lazy import it
-        # here to save on the order of 10 ms of import time for most users
-        #
-        # The previous way Tester was imported also had a side effect of adding
-        # the full `numpy.testing` namespace
-        #
         # module level getattr is only supported in 3.7 onwards
         # https://www.python.org/dev/peps/pep-0562/
         def __getattr__(attr):
+            # Emit warnings for deprecated attributes
+            try:
+                val, msg = __deprecated_attrs__[attr]
+            except KeyError:
+                pass
+            else:
+                warnings.warn(msg, DeprecationWarning, stacklevel=2)
+                return val
+
+            # Importing Tester requires importing all of UnitTest which is not a
+            # cheap import Since it is mainly used in test suits, we lazy import it
+            # here to save on the order of 10 ms of import time for most users
+            #
+            # The previous way Tester was imported also had a side effect of adding
+            # the full `numpy.testing` namespace
             if attr == 'testing':
                 import numpy.testing as testing
                 return testing
             elif attr == 'Tester':
                 from .testing import Tester
                 return Tester
-            else:
-                raise AttributeError("module {!r} has no attribute "
-                                     "{!r}".format(__name__, attr))
+
+            raise AttributeError("module {!r} has no attribute "
+                                 "{!r}".format(__name__, attr))
 
         def __dir__():
-            return __all__ + ['Tester', 'testing']
+            return list(globals().keys() | {'Tester', 'testing'})
 
     else:
         # We don't actually use this ourselves anymore, but I'm not 100% sure that
         # no-one else in the world is using it (though I hope not)
         from .testing import Tester
+
+        # We weren't able to emit a warning about these, so keep them around
+        globals().update({
+            k: v
+            for k, (v, msg) in __deprecated_attrs__.items()
+        })
+
 
     # Pytest testing
     from numpy._pytesttester import PytestTester
@@ -254,3 +299,55 @@ else:
 
     _sanity_check()
     del _sanity_check
+
+    def _mac_os_check():
+        """
+        Quick Sanity check for Mac OS look for accelerate build bugs.
+        Testing numpy polyfit calls init_dgelsd(LAPACK)
+        """
+        try:
+            c = array([3., 2., 1.])
+            x = linspace(0, 2, 5)
+            y = polyval(c, x)
+            _ = polyfit(x, y, 2, cov=True)
+        except ValueError:
+            pass
+
+    import sys
+    if sys.platform == "darwin":
+        with warnings.catch_warnings(record=True) as w:
+            _mac_os_check()
+            # Throw runtime error, if the test failed Check for warning and error_message
+            error_message = ""
+            if len(w) > 0:
+                error_message = "{}: {}".format(w[-1].category.__name__, str(w[-1].message))
+                msg = (
+                    "Polyfit sanity test emitted a warning, most likely due "
+                    "to using a buggy Accelerate backend. If you compiled "
+                    "yourself, more information is available at "
+                    "https://numpy.org/doc/stable/user/building.html#accelerated-blas-lapack-libraries "
+                    "Otherwise report this to the vendor "
+                    "that provided NumPy.\n{}\n".format(error_message))
+                raise RuntimeError(msg)
+    del _mac_os_check
+
+    # We usually use madvise hugepages support, but on some old kernels it
+    # is slow and thus better avoided.
+    # Specifically kernel version 4.6 had a bug fix which probably fixed this:
+    # https://github.com/torvalds/linux/commit/7cf91a98e607c2f935dbcc177d70011e95b8faff
+    import os
+    use_hugepage = os.environ.get("NUMPY_MADVISE_HUGEPAGE", None)
+    if sys.platform == "linux" and use_hugepage is None:
+        use_hugepage = 1
+        kernel_version = os.uname().release.split(".")[:2]
+        kernel_version = tuple(int(v) for v in kernel_version)
+        if kernel_version < (4, 6):
+            use_hugepage = 0
+    elif use_hugepage is None:
+        # This is not Linux, so it should not matter, just enable anyway
+        use_hugepage = 1
+    else:
+        use_hugepage = int(use_hugepage)
+
+    # Note that this will currently only make a difference on Linux
+    core.multiarray._set_madvise_hugepage(use_hugepage)

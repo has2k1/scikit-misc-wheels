@@ -64,6 +64,13 @@
 #define NPY_GCC_TARGET_AVX512F
 #endif
 
+#if defined HAVE_ATTRIBUTE_TARGET_AVX512_SKX && defined HAVE_LINK_AVX512_SKX
+#define NPY_GCC_TARGET_AVX512_SKX __attribute__((target("avx512f,avx512dq,avx512vl,avx512bw,avx512cd")))
+#elif defined HAVE_ATTRIBUTE_TARGET_AVX512_SKX_WITH_INTRINSICS
+#define NPY_GCC_TARGET_AVX512_SKX __attribute__((target("avx512f,avx512dq,avx512vl,avx512bw,avx512cd")))
+#else
+#define NPY_GCC_TARGET_AVX512_SKX
+#endif
 /*
  * mark an argument (starting from 1) that must not be NULL and is not checked
  * DO NOT USE IF FUNCTION CHECKS FOR NULL!! the compiler will remove the check
@@ -369,18 +376,8 @@ typedef long npy_long;
 typedef float npy_float;
 typedef double npy_double;
 
-/*
- * Hash value compatibility.
- * As of Python 3.2 hash values are of type Py_hash_t.
- * Previous versions use C long.
- */
-#if PY_VERSION_HEX < 0x03020000
-typedef long npy_hash_t;
-#define NPY_SIZEOF_HASH_T NPY_SIZEOF_LONG
-#else
 typedef Py_hash_t npy_hash_t;
 #define NPY_SIZEOF_HASH_T NPY_SIZEOF_INTP
-#endif
 
 /*
  * Disabling C99 complex usage: a lot of C code in numpy/scipy rely on being

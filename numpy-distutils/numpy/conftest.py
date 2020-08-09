@@ -1,8 +1,9 @@
 """
 Pytest configuration and fixtures for the Numpy test suite.
 """
-from __future__ import division, absolute_import, print_function
+import os
 
+import hypothesis
 import pytest
 import numpy
 
@@ -12,6 +13,12 @@ from numpy.core._multiarray_tests import get_fpu_mode
 _old_fpu_mode = None
 _collect_results = {}
 
+# See https://hypothesis.readthedocs.io/en/latest/settings.html
+hypothesis.settings.register_profile(
+    name="numpy-profile", deadline=None, print_blob=True,
+)
+hypothesis.settings.load_profile("numpy-profile")
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers",
@@ -20,6 +27,24 @@ def pytest_configure(config):
         "leaks_references: Tests that are known to leak references.")
     config.addinivalue_line("markers",
         "slow: Tests that are very slow.")
+    config.addinivalue_line("markers",
+        "slow_pypy: Tests that are very slow on pypy.")
+
+
+def pytest_addoption(parser):
+    parser.addoption("--available-memory", action="store", default=None,
+                     help=("Set amount of memory available for running the "
+                           "test suite. This can result to tests requiring "
+                           "especially large amounts of memory to be skipped. "
+                           "Equivalent to setting environment variable "
+                           "NPY_AVAILABLE_MEM. Default: determined"
+                           "automatically."))
+
+
+def pytest_sessionstart(session):
+    available_mem = session.config.getoption('available_memory')
+    if available_mem is not None:
+        os.environ['NPY_AVAILABLE_MEM'] = available_mem
 
 
 #FIXME when yield tests are gone.

@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 import sys
 import pytest
 
@@ -1522,6 +1520,13 @@ def test_iter_allocate_output_errors():
                         [['readonly'], ['writeonly', 'allocate']],
                         op_dtypes=[None, np.dtype('f4')],
                         op_axes=[None, [0, 2, 1, 0]])
+    # Not all axes may be specified if a reduction. If there is a hole
+    # in op_axes, this is an error.
+    a = arange(24, dtype='i4').reshape(2, 3, 4)
+    assert_raises(ValueError, nditer, [a, None], ["reduce_ok"],
+                        [['readonly'], ['readwrite', 'allocate']],
+                        op_dtypes=[None, np.dtype('f4')],
+                        op_axes=[None, [0, np.newaxis, 2]])
 
 def test_iter_remove_axis():
     a = arange(24).reshape(2, 3, 4)
@@ -2104,7 +2109,7 @@ def test_iter_buffering_string():
     assert_equal(i[0], b'abc')
     assert_equal(i[0].dtype, np.dtype('S6'))
 
-    a = np.array(['abc', 'a', 'abcd'], dtype=np.unicode)
+    a = np.array(['abc', 'a', 'abcd'], dtype=np.unicode_)
     assert_equal(a.dtype, np.dtype('U4'))
     assert_raises(TypeError, nditer, a, ['buffered'], ['readonly'],
                     op_dtypes='U2')
@@ -2188,7 +2193,7 @@ def test_iter_no_broadcast():
                   [['readonly'], ['readonly'], ['readonly', 'no_broadcast']])
 
 
-class TestIterNested(object):
+class TestIterNested:
 
     def test_basic(self):
         # Test nested iteration basic usage
@@ -2663,6 +2668,14 @@ def test_iter_allocated_array_dtypes():
         b[1] = a + 1
     assert_equal(it.operands[1], [[0, 2], [2, 4], [19, 21]])
 
+    # Check the same (less sensitive) thing when `op_axes` with -1 is given.
+    it = np.nditer(([[1, 3, 20]], None), op_dtypes=[None, ('i4', (2,))],
+                   flags=["reduce_ok"], op_axes=[None, (-1, 0)])
+    for a, b in it:
+        b[0] = a - 1
+        b[1] = a + 1
+    assert_equal(it.operands[1], [[0, 2], [2, 4], [19, 21]])
+
     # Make sure this works for scalars too
     it = np.nditer((10, 2, None), op_dtypes=[None, None, ('i4', (2, 2))])
     for a, b, c in it:
@@ -2690,7 +2703,15 @@ def test_0d_iter():
     i = nditer(np.arange(5), ['multi_index'], [['readonly']], op_axes=[()])
     assert_equal(i.ndim, 0)
     assert_equal(len(i), 1)
-    # note that itershape=(), still behaves like None due to the conversions
+
+    i = nditer(np.arange(5), ['multi_index'], [['readonly']],
+               op_axes=[()], itershape=())
+    assert_equal(i.ndim, 0)
+    assert_equal(len(i), 1)
+
+    # passing an itershape alone is not enough, the op_axes are also needed
+    with assert_raises(ValueError):
+        nditer(np.arange(5), ['multi_index'], [['readonly']], itershape=())
 
     # Test a more complex buffered casting case (same as another test above)
     sdt = [('a', 'f4'), ('b', 'i8'), ('c', 'c8', (2, 3)), ('d', 'O')]

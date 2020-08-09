@@ -1159,12 +1159,12 @@ fail:
 }
 
 
-/* 
+/*
  * Inner loop for unravel_index
  * order must be NPY_CORDER or NPY_FORTRANORDER
  */
 static int
-unravel_index_loop(int unravel_ndim, npy_intp *unravel_dims,
+unravel_index_loop(int unravel_ndim, npy_intp const *unravel_dims,
                    npy_intp unravel_size, npy_intp count,
                    char *indices, npy_intp indices_stride,
                    npy_intp *coords, NPY_ORDER order)
@@ -1186,7 +1186,7 @@ unravel_index_loop(int unravel_ndim, npy_intp *unravel_dims,
         }
         idx = idx_start;
         for (i = 0; i < unravel_ndim; ++i) {
-            /* 
+            /*
              * Using a local seems to enable single-divide optimization
              * but only if the / precedes the %
              */
@@ -1242,15 +1242,25 @@ arr_unravel_index(PyObject *self, PyObject *args, PyObject *kwds)
      */
     if (kwds) {
         PyObject *dims_item, *shape_item;
-        dims_item = PyDict_GetItemString(kwds, "dims");
-        shape_item = PyDict_GetItemString(kwds, "shape");
+        dims_item = _PyDict_GetItemStringWithError(kwds, "dims");
+        if (dims_item == NULL && PyErr_Occurred()){
+            return NULL;
+        }
+        shape_item = _PyDict_GetItemStringWithError(kwds, "shape");
+        if (shape_item == NULL && PyErr_Occurred()){
+            return NULL;
+        }
         if (dims_item != NULL && shape_item == NULL) {
             if (DEPRECATE("'shape' argument should be"
                           " used instead of 'dims'") < 0) {
                 return NULL;
             }
-            PyDict_SetItemString(kwds, "shape", dims_item);
-            PyDict_DelItemString(kwds, "dims");
+            if (PyDict_SetItemString(kwds, "shape", dims_item) < 0) {
+                return NULL;
+            }
+            if (PyDict_DelItemString(kwds, "dims") < 0) {
+                return NULL;
+            }
         }
     }
 
@@ -1415,39 +1425,13 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
     #else
     char *docstr;
     #endif
-    static char *msg = "already has a docstring";
-    PyObject *tp_dict = PyArrayDescr_Type.tp_dict;
-    PyObject *myobj;
-    static PyTypeObject *PyMemberDescr_TypePtr = NULL;
-    static PyTypeObject *PyGetSetDescr_TypePtr = NULL;
-    static PyTypeObject *PyMethodDescr_TypePtr = NULL;
+    static char *msg = "already has a different docstring";
 
     /* Don't add docstrings */
     if (Py_OptimizeFlag > 1) {
         Py_RETURN_NONE;
     }
 
-    if (PyGetSetDescr_TypePtr == NULL) {
-        /* Get "subdescr" */
-        myobj = PyDict_GetItemString(tp_dict, "fields");
-        if (myobj != NULL) {
-            PyGetSetDescr_TypePtr = Py_TYPE(myobj);
-        }
-    }
-    if (PyMemberDescr_TypePtr == NULL) {
-        myobj = PyDict_GetItemString(tp_dict, "alignment");
-        if (myobj != NULL) {
-            PyMemberDescr_TypePtr = Py_TYPE(myobj);
-        }
-    }
-    if (PyMethodDescr_TypePtr == NULL) {
-        myobj = PyDict_GetItemString(tp_dict, "newbyteorder");
-        if (myobj != NULL) {
-            PyMethodDescr_TypePtr = Py_TYPE(myobj);
-        }
-    }
-
-#if defined(NPY_PY3K)
     if (!PyArg_ParseTuple(args, "OO!:add_docstring", &obj, &PyUnicode_Type, &str)) {
         return NULL;
     }
@@ -1456,47 +1440,48 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
     if (docstr == NULL) {
         return NULL;
     }
-#else
-    if (!PyArg_ParseTuple(args, "OO!:add_docstring", &obj, &PyString_Type, &str)) {
-        return NULL;
-    }
 
-    docstr = PyString_AS_STRING(str);
-#endif
-
-#define _TESTDOC1(typebase) (Py_TYPE(obj) == &Py##typebase##_Type)
-#define _TESTDOC2(typebase) (Py_TYPE(obj) == Py##typebase##_TypePtr)
-#define _ADDDOC(typebase, doc, name) do {                               \
-        Py##typebase##Object *new = (Py##typebase##Object *)obj;        \
+#define _ADDDOC(doc, name)                                              \
         if (!(doc)) {                                                   \
             doc = docstr;                                               \
+            Py_INCREF(str);  /* hold on to string (leaks reference) */  \
         }                                                               \
-        else {                                                          \
+        else if (strcmp(doc, docstr) != 0) {                            \
             PyErr_Format(PyExc_RuntimeError, "%s method %s", name, msg); \
             return NULL;                                                \
-        }                                                               \
-    } while (0)
+        }
 
-    if (_TESTDOC1(CFunction)) {
-        _ADDDOC(CFunction, new->m_ml->ml_doc, new->m_ml->ml_name);
+    if (Py_TYPE(obj) == &PyCFunction_Type) {
+        PyCFunctionObject *new = (PyCFunctionObject *)obj;
+        _ADDDOC(new->m_ml->ml_doc, new->m_ml->ml_name);
     }
-    else if (_TESTDOC1(Type)) {
-        _ADDDOC(Type, new->tp_doc, new->tp_name);
+    else if (Py_TYPE(obj) == &PyType_Type) {
+        PyTypeObject *new = (PyTypeObject *)obj;
+        _ADDDOC(new->tp_doc, new->tp_name);
     }
-    else if (_TESTDOC2(MemberDescr)) {
-        _ADDDOC(MemberDescr, new->d_member->doc, new->d_member->name);
+    else if (Py_TYPE(obj) == &PyMemberDescr_Type) {
+        PyMemberDescrObject *new = (PyMemberDescrObject *)obj;
+        _ADDDOC(new->d_member->doc, new->d_member->name);
     }
-    else if (_TESTDOC2(GetSetDescr)) {
-        _ADDDOC(GetSetDescr, new->d_getset->doc, new->d_getset->name);
+    else if (Py_TYPE(obj) == &PyGetSetDescr_Type) {
+        PyGetSetDescrObject *new = (PyGetSetDescrObject *)obj;
+        _ADDDOC(new->d_getset->doc, new->d_getset->name);
     }
-    else if (_TESTDOC2(MethodDescr)) {
-        _ADDDOC(MethodDescr, new->d_method->ml_doc, new->d_method->ml_name);
+    else if (Py_TYPE(obj) == &PyMethodDescr_Type) {
+        PyMethodDescrObject *new = (PyMethodDescrObject *)obj;
+        _ADDDOC(new->d_method->ml_doc, new->d_method->ml_name);
     }
     else {
         PyObject *doc_attr;
 
         doc_attr = PyObject_GetAttrString(obj, "__doc__");
-        if (doc_attr != NULL && doc_attr != Py_None) {
+        if (doc_attr != NULL && doc_attr != Py_None &&
+                (PyUnicode_Compare(doc_attr, str) != 0)) {
+            Py_DECREF(doc_attr);
+            if (PyErr_Occurred()) {
+                /* error during PyUnicode_Compare */
+                return NULL;
+            }
             PyErr_Format(PyExc_RuntimeError, "object %s", msg);
             return NULL;
         }
@@ -1510,11 +1495,8 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *args)
         Py_RETURN_NONE;
     }
 
-#undef _TESTDOC1
-#undef _TESTDOC2
 #undef _ADDDOC
 
-    Py_INCREF(str);
     Py_RETURN_NONE;
 }
 

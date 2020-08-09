@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-from __future__ import division, absolute_import, print_function
-
-import sys, os, re
+import os
+import re
+import sys
 
 # Minimum version, enforced by sphinx
 needs_sphinx = '2.2.0'
@@ -42,7 +42,7 @@ master_doc = 'contents'
 
 # General substitutions.
 project = 'NumPy'
-copyright = '2008-2019, The SciPy community'
+copyright = '2008-2020, The SciPy community'
 
 # The default replacements for |version| and |release|, also used in various
 # other places throughout the built documents.
@@ -155,6 +155,9 @@ plot_html_show_source_link = False
 # The font size ('10pt', '11pt' or '12pt').
 #latex_font_size = '10pt'
 
+# XeLaTeX for better support of unicode characters
+latex_engine = 'xelatex'
+
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, document class [howto/manual]).
 _stdauthor = 'Written by the NumPy community'
@@ -178,15 +181,29 @@ latex_elements = {
 }
 
 # Additional stuff for the LaTeX preamble.
-latex_preamble = r'''
-\usepackage{amsmath}
-\DeclareUnicodeCharacter{00A0}{\nobreakspace}
-
+latex_elements['preamble'] = r'''
 % In the parameters section, place a newline after the Parameters
 % header
+\usepackage{xcolor}
 \usepackage{expdlist}
 \let\latexdescription=\description
 \def\description{\latexdescription{}{} \breaklabel}
+% but expdlist old LaTeX package requires fixes:
+% 1) remove extra space
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\@item{{\@breaklabel} }{{\@breaklabel}}{}{}
+\makeatother
+% 2) fix bug in expdlist's way of breaking the line after long item label
+\makeatletter
+\def\breaklabel{%
+    \def\@breaklabel{%
+        \leavevmode\par
+        % now a hack because Sphinx inserts \leavevmode after term node
+        \def\leavevmode{\def\leavevmode{\unhbox\voidb@x}}%
+    }%
+}
+\makeatother
 
 % Make Examples/etc section headers smaller and more compact
 \makeatletter
@@ -223,9 +240,12 @@ texinfo_documents = [
 # Intersphinx configuration
 # -----------------------------------------------------------------------------
 intersphinx_mapping = {
+    'neps': ('https://numpy.org/neps', None),
     'python': ('https://docs.python.org/dev', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
-    'matplotlib': ('https://matplotlib.org', None)
+    'matplotlib': ('https://matplotlib.org', None),
+    'imageio': ('https://imageio.readthedocs.io/en/stable', None),
+    'skimage': ('https://scikit-image.org/docs/stable', None),
 }
 
 
@@ -243,7 +263,6 @@ numpydoc_use_plots = True
 # Autosummary
 # -----------------------------------------------------------------------------
 
-import glob
 autosummary_generate = True
 
 # -----------------------------------------------------------------------------
@@ -367,7 +386,6 @@ def linkcode_resolve(domain, info):
            numpy.__version__, fn, linespec)
 
 from pygments.lexers import CLexer
-from pygments import token
 import copy
 
 class NumPyLexer(CLexer):

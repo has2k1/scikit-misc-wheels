@@ -64,7 +64,7 @@ extend_str(char **strp, Py_ssize_t n, Py_ssize_t *maxp)
 
 static int
 dump_data(char **string, Py_ssize_t *n, Py_ssize_t *max_n, char *data, int nd,
-          npy_intp *dimensions, npy_intp *strides, PyArrayObject* self)
+          npy_intp const *dimensions, npy_intp const *strides, PyArrayObject* self)
 {
     PyObject *op = NULL, *sp = NULL;
     char *ostring;
@@ -168,15 +168,13 @@ array_repr_builtin(PyArrayObject *self, int repr)
 NPY_NO_EXPORT PyObject *
 array_repr(PyArrayObject *self)
 {
-    PyObject *s, *arglist;
+    PyObject *s;
 
     if (PyArray_ReprFunction == NULL) {
         s = array_repr_builtin(self, 1);
     }
     else {
-        arglist = Py_BuildValue("(O)", self);
-        s = PyEval_CallObject(PyArray_ReprFunction, arglist);
-        Py_DECREF(arglist);
+        s = PyObject_CallFunctionObjArgs(PyArray_ReprFunction, self, NULL);
     }
     return s;
 }
@@ -185,15 +183,13 @@ array_repr(PyArrayObject *self)
 NPY_NO_EXPORT PyObject *
 array_str(PyArrayObject *self)
 {
-    PyObject *s, *arglist;
+    PyObject *s;
 
     if (PyArray_StrFunction == NULL) {
         s = array_repr_builtin(self, 0);
     }
     else {
-        arglist = Py_BuildValue("(O)", self);
-        s = PyEval_CallObject(PyArray_StrFunction, arglist);
-        Py_DECREF(arglist);
+        s = PyObject_CallFunctionObjArgs(PyArray_StrFunction, self, NULL);
     }
     return s;
 }
@@ -226,34 +222,3 @@ array_format(PyArrayObject *self, PyObject *args)
     }
 }
 
-#ifndef NPY_PY3K
-
-NPY_NO_EXPORT PyObject *
-array_unicode(PyArrayObject *self)
-{
-    PyObject *uni;
-
-    if (PyArray_NDIM(self) == 0) {
-        PyObject *item = PyArray_ToScalar(PyArray_DATA(self), self);
-        if (item == NULL){
-            return NULL;
-        }
-
-        /* defer to invoking `unicode` on the scalar */
-        uni = PyObject_CallFunctionObjArgs(
-            (PyObject *)&PyUnicode_Type, item, NULL);
-        Py_DECREF(item);
-    }
-    else {
-        /* Do what unicode(self) would normally do */
-        PyObject *str = PyObject_Str((PyObject *)self);
-        if (str == NULL){
-            return NULL;
-        }
-        uni = PyUnicode_FromObject(str);
-        Py_DECREF(str);
-    }
-    return uni;
-}
-
-#endif

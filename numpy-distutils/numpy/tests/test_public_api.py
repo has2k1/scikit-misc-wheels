@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 import sys
 import subprocess
 import pkgutil
@@ -30,9 +28,6 @@ def check_dir(module, module_name=None):
     return results
 
 
-@pytest.mark.skipif(
-    sys.version_info[0] < 3,
-    reason="NumPy exposes slightly different functions on Python 2")
 def test_numpy_namespace():
     # None of these objects are publicly documented to be part of the main
     # NumPy namespace (some are useful though, others need to be cleaned up)
@@ -50,7 +45,6 @@ def test_numpy_namespace():
         'fastCopyAndTranspose': 'numpy.core._multiarray_umath._fastCopyAndTranspose',
         'get_array_wrap': 'numpy.lib.shape_base.get_array_wrap',
         'get_include': 'numpy.lib.utils.get_include',
-        'int_asbuffer': 'numpy.core._multiarray_umath.int_asbuffer',
         'mafromtxt': 'numpy.lib.npyio.mafromtxt',
         'ndfromtxt': 'numpy.lib.npyio.ndfromtxt',
         'recfromcsv': 'numpy.lib.npyio.recfromcsv',
@@ -60,22 +54,26 @@ def test_numpy_namespace():
         'show_config': 'numpy.__config__.show',
         'who': 'numpy.lib.utils.who',
     }
-    # These built-in types are re-exported by numpy.
-    builtins = {
-        'bool': 'builtins.bool',
-        'complex': 'builtins.complex',
-        'float': 'builtins.float',
-        'int': 'builtins.int',
-        'long': 'builtins.int',
-        'object': 'builtins.object',
-        'str': 'builtins.str',
-        'unicode': 'builtins.str',
-    }
-    whitelist = dict(undocumented, **builtins)
+    if sys.version_info < (3, 7):
+        # These built-in types are re-exported by numpy.
+        builtins = {
+            'bool': 'builtins.bool',
+            'complex': 'builtins.complex',
+            'float': 'builtins.float',
+            'int': 'builtins.int',
+            'long': 'builtins.int',
+            'object': 'builtins.object',
+            'str': 'builtins.str',
+            'unicode': 'builtins.str',
+        }
+        allowlist = dict(undocumented, **builtins)
+    else:
+        # after 3.7, we override dir to not show these members
+        allowlist = undocumented
     bad_results = check_dir(np)
     # pytest gives better error messages with the builtin assert than with
     # assert_equal
-    assert bad_results == whitelist
+    assert bad_results == allowlist
 
 
 @pytest.mark.parametrize('name', ['testing', 'Tester'])
@@ -98,6 +96,12 @@ def test_import_lazy_import(name):
 
     # Make sure they are still in the __dir__
     assert name in dir(np)
+
+
+def test_dir_testing():
+    """Assert that output of dir has only one "testing/tester"
+    attribute without duplicate"""
+    assert len(dir(np)) == len(set(dir(np)))
 
 
 def test_numpy_linalg():
@@ -154,7 +158,6 @@ PUBLIC_MODULES = ['numpy.' + s for s in [
     "doc.structured_arrays",
     "doc.subclassing",
     "doc.ufuncs",
-    "dual",
     "f2py",
     "fft",
     "lib",
@@ -177,6 +180,7 @@ PUBLIC_MODULES = ['numpy.' + s for s in [
     "polynomial.polyutils",
     "random",
     "testing",
+    "typing",
     "version",
 ]]
 
@@ -210,6 +214,7 @@ PRIVATE_BUT_PRESENT_MODULES = ['numpy.' + s for s in [
     "core.umath",
     "core.umath_tests",
     "distutils.ccompiler",
+    'distutils.ccompiler_opt',
     "distutils.command",
     "distutils.command.autodist",
     "distutils.command.bdist_rpm",
@@ -228,7 +233,6 @@ PRIVATE_BUT_PRESENT_MODULES = ['numpy.' + s for s in [
     "distutils.command.install_data",
     "distutils.command.install_headers",
     "distutils.command.sdist",
-    "distutils.compat",
     "distutils.conv_template",
     "distutils.core",
     "distutils.extension",
@@ -259,6 +263,7 @@ PRIVATE_BUT_PRESENT_MODULES = ['numpy.' + s for s in [
     "distutils.numpy_distribution",
     "distutils.pathccompiler",
     "distutils.unixccompiler",
+    "dual",
     "f2py.auxfuncs",
     "f2py.capi_maps",
     "f2py.cb_rules",
@@ -299,6 +304,7 @@ PRIVATE_BUT_PRESENT_MODULES = ['numpy.' + s for s in [
     "matrixlib",
     "matrixlib.defmatrix",
     "random.mtrand",
+    "random.bit_generator",
     "testing.print_coercion_tables",
     "testing.utils",
 ]]
@@ -386,7 +392,7 @@ SKIP_LIST_2 = [
     'numpy.matlib.fft',
     'numpy.matlib.random',
     'numpy.matlib.ctypeslib',
-    'numpy.matlib.ma'
+    'numpy.matlib.ma',
 ]
 
 

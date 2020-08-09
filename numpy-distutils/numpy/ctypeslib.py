@@ -49,8 +49,6 @@ Then, we're ready to call ``foo_func``:
 >>> _lib.foo_func(out, len(out))                #doctest: +SKIP
 
 """
-from __future__ import division, absolute_import, print_function
-
 __all__ = ['load_library', 'ndpointer', 'ctypes_load_library',
            'c_intp', 'as_ctypes', 'as_array']
 
@@ -299,8 +297,8 @@ def ndpointer(dtype=None, ndim=None, shape=None, flags=None):
         if num is None:
             try:
                 flags = [x.strip().upper() for x in flags]
-            except Exception:
-                raise TypeError("invalid flags specification")
+            except Exception as e:
+                raise TypeError("invalid flags specification") from e
             num = _num_fromflags(flags)
 
     # normalize shape to an Optional[tuple]
@@ -379,10 +377,10 @@ if ctypes is not None:
         dtype_native = dtype.newbyteorder('=')
         try:
             ctype = _scalar_type_map[dtype_native]
-        except KeyError:
+        except KeyError as e:
             raise NotImplementedError(
                 "Converting {!r} to a ctypes type".format(dtype)
-            )
+            ) from None
 
         if dtype_with_endian.byteorder == '>':
             ctype = ctype.__ctype_be__

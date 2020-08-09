@@ -193,7 +193,7 @@ Those can be useful for precise floating point comparison.
 .. c:function:: int npy_get_floatstatus_barrier(char*)
 
     Get floating point status. A pointer to a local variable is passed in to
-    prevent aggressive compiler optimizations from reodering this function call
+    prevent aggressive compiler optimizations from reordering this function call
     relative to the code setting the status, which could lead to incorrect
     results.
 
@@ -219,7 +219,7 @@ Those can be useful for precise floating point comparison.
 .. c:function:: int npy_clear_floatstatus_barrier(char*)
 
     Clears the floating point status. A pointer to a local variable is passed in to
-    prevent aggressive compiler optimizations from reodering this function call.
+    prevent aggressive compiler optimizations from reordering this function call.
     Returns the previous status mask.
 
     .. versionadded:: 1.15.0
@@ -249,9 +249,14 @@ Linking against the core math library in an extension
 To use the core math library in your own extension, you need to add the npymath
 compile and link options to your extension in your setup.py:
 
+        .. hidden in a comment so as to be included in refguide but not rendered documentation
+                >>> import numpy.distutils.misc_util
+                >>> config = np.distutils.misc_util.Configuration(None, '', '.')
+                >>> with open('foo.c', 'w') as f: pass
+
         >>> from numpy.distutils.misc_util import get_info
         >>> info = get_info('npymath')
-        >>> config.add_extension('foo', sources=['foo.c'], extra_info=info)
+        >>> _ = config.add_extension('foo', sources=['foo.c'], extra_info=info)
 
 In other words, the usage of info is exactly the same as when using blas_info
 and co.

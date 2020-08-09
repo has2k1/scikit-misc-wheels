@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """ NumPy is the fundamental package for array computing with Python.
 
 It provides:
@@ -17,18 +17,17 @@ variety of databases.
 All NumPy wheels distributed on PyPI are BSD licensed.
 
 """
-from __future__ import division, print_function
-
 DOCLINES = (__doc__ or '').split("\n")
 
 import os
 import sys
 import subprocess
 import textwrap
+import sysconfig
 
 
-if sys.version_info[:2] < (3, 5):
-    raise RuntimeError("Python version >= 3.5 required.")
+if sys.version_info[:2] < (3, 6):
+    raise RuntimeError("Python version >= 3.6 required.")
 
 import builtins
 
@@ -41,7 +40,6 @@ License :: OSI Approved
 Programming Language :: C
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.5
 Programming Language :: Python :: 3.6
 Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
@@ -56,7 +54,7 @@ Operating System :: MacOS
 """
 
 MAJOR               = 1
-MINOR               = 18
+MINOR               = 20
 MICRO               = 0
 ISRELEASED          = False
 VERSION             = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
@@ -163,6 +161,7 @@ def configuration(parent_package='',top_path=None):
 
     config.add_subpackage('numpy')
     config.add_data_files(('numpy', 'LICENSE.txt'))
+    config.add_data_files(('numpy', 'numpy/__init__.pxd'))
 
     config.get_version('numpy/version.py') # sets config.version
 
@@ -180,7 +179,7 @@ def check_submodules():
             if 'path' in l:
                 p = l.split('=')[-1].strip()
                 if not os.path.exists(p):
-                    raise ValueError('Submodule %s missing' % p)
+                    raise ValueError('Submodule {} missing'.format(p))
 
 
     proc = subprocess.Popen(['git', 'submodule', 'status'],
@@ -189,7 +188,8 @@ def check_submodules():
     status = status.decode("ascii", "replace")
     for line in status.splitlines():
         if line.startswith('-') or line.startswith('+'):
-            raise ValueError('Submodule not clean: %s' % line)
+            raise ValueError('Submodule not clean: {}'.format(line))
+            
 
 
 class concat_license_files():
@@ -226,6 +226,40 @@ class sdist_checked(sdist):
         check_submodules()
         with concat_license_files():
             sdist.run(self)
+
+
+def get_build_overrides():
+    """
+    Custom build commands to add `-std=c99` to compilation
+    """
+    from numpy.distutils.command.build_clib import build_clib
+    from numpy.distutils.command.build_ext import build_ext
+
+    def _is_using_gcc(obj):
+        is_gcc = False
+        if obj.compiler.compiler_type == 'unix':
+            cc = sysconfig.get_config_var("CC")
+            if not cc:
+                cc = ""
+            compiler_name = os.path.basename(cc)
+            is_gcc = "gcc" in compiler_name
+        return is_gcc
+
+    class new_build_clib(build_clib):
+        def build_a_library(self, build_info, lib_name, libraries):
+            if _is_using_gcc(self):
+                args = build_info.get('extra_compiler_args') or []
+                args.append('-std=c99')
+                build_info['extra_compiler_args'] = args
+            build_clib.build_a_library(self, build_info, lib_name, libraries)
+
+    class new_build_ext(build_ext):
+        def build_extension(self, ext):
+            if _is_using_gcc(self):
+                if '-std=c99' not in ext.extra_compile_args:
+                    ext.extra_compile_args.append('-std=c99')
+            build_ext.build_extension(self, ext)
+    return new_build_clib, new_build_ext
 
 
 def generate_cython():
@@ -369,13 +403,23 @@ def parse_setuppy_commands():
     return True
 
 
+def get_docs_url():
+    if not ISRELEASED:
+        return "https://numpy.org/devdocs"
+    else:
+        # For releaeses, this URL ends up on pypi.
+        # By pinning the version, users looking at old PyPI releases can get
+        # to the associated docs easily.
+        return "https://numpy.org/doc/{}.{}".format(MAJOR, MINOR)
+
+
 def setup_package():
     src_path = os.path.dirname(os.path.abspath(__file__))
     old_path = os.getcwd()
     os.chdir(src_path)
     sys.path.insert(0, src_path)
 
-    # Rewrite the version file everytime
+    # Rewrite the version file every time
     write_version_py()
 
     # The f2py scripts that will be installed
@@ -390,6 +434,8 @@ def setup_package():
             'f2py%s.%s = numpy.f2py.f2py2e:main' % sys.version_info[:2],
             ]
 
+    cmdclass={"sdist": sdist_checked,
+             }
     metadata = dict(
         name = 'numpy',
         maintainer = "NumPy Developers",
@@ -401,16 +447,15 @@ def setup_package():
         download_url = "https://pypi.python.org/pypi/numpy",
         project_urls={
             "Bug Tracker": "https://github.com/numpy/numpy/issues",
-            "Documentation": "https://docs.scipy.org/doc/numpy/",
+            "Documentation": get_docs_url(),
             "Source Code": "https://github.com/numpy/numpy",
         },
         license = 'BSD',
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms = ["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
-        test_suite='nose.collector',
-        cmdclass={"sdist": sdist_checked,
-                 },
-        python_requires='>=3.5',
+        test_suite='pytest',
+        cmdclass=cmdclass,
+        python_requires='>=3.6',
         zip_safe=False,
         entry_points={
             'console_scripts': f2py_cmds
@@ -424,8 +469,9 @@ def setup_package():
         # Raise errors for unsupported commands, improve help output, etc.
         run_build = parse_setuppy_commands()
 
-    from setuptools import setup
     if run_build:
+        # patches distutils, even though we don't use it
+        import setuptools  # noqa: F401
         from numpy.distutils.core import setup
         cwd = os.path.abspath(os.path.dirname(__file__))
         if not 'sdist' in sys.argv:
@@ -433,7 +479,10 @@ def setup_package():
             generate_cython()
 
         metadata['configuration'] = configuration
+        # Customize extension building
+        cmdclass['build_clib'], cmdclass['build_ext'] = get_build_overrides()
     else:
+        from setuptools import setup
         # Version number is added to metadata inside configuration() if build
         # is run.
         metadata['version'] = get_version_info()[0]

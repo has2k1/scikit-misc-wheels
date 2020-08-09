@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division, print_function
-
 from .common import Benchmark
 
 import numpy as np
@@ -182,3 +180,14 @@ class UnpackBits(Benchmark):
 class Indices(Benchmark):
     def time_indices(self):
         np.indices((1000, 500))
+
+class VarComplex(Benchmark):
+    params = [10**n for n in range(1, 9)]
+    def setup(self, n):
+        self.arr = np.random.randn(n) + 1j * np.random.randn(n)
+
+    def teardown(self, n):
+        del self.arr
+
+    def time_var(self, n):
+        self.arr.var()

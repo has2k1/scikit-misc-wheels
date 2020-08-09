@@ -13,6 +13,7 @@
 #include "numpy/npy_math.h"
 
 #include "common.h"
+#include "ctors.h"
 #include "scalartypes.h"
 #include "mapping.h"
 
@@ -212,13 +213,17 @@ PyArray_AdaptFlexibleDType(PyObject *data_obj, PyArray_Descr *data_dtype,
                 case NPY_HALF:
                 case NPY_FLOAT:
                 case NPY_DOUBLE:
-                case NPY_LONGDOUBLE:
                     size = 32;
+                    break;
+                case NPY_LONGDOUBLE:
+                    size = 48;
                     break;
                 case NPY_CFLOAT:
                 case NPY_CDOUBLE:
+                    size = 2 * 32;
+                    break;
                 case NPY_CLONGDOUBLE:
-                    size = 64;
+                    size = 2 * 48;
                     break;
                 case NPY_OBJECT:
                     size = 64;
@@ -255,11 +260,11 @@ PyArray_AdaptFlexibleDType(PyObject *data_obj, PyArray_Descr *data_dtype,
                             int ndim = 0;
                             npy_intp dims[NPY_MAXDIMS];
                             list = PyArray_ToList((PyArrayObject *)data_obj);
-                            result = PyArray_GetArrayParamsFromObject(
+                            result = PyArray_GetArrayParamsFromObject_int(
                                     list,
                                     retval,
                                     0, &dtype,
-                                    &ndim, dims, &arr, NULL);
+                                    &ndim, dims, &arr);
                             Py_DECREF(list);
                             Py_XDECREF(arr);
                             if (result < 0) {
@@ -877,7 +882,13 @@ PyArray_CanCastTypeTo(PyArray_Descr *from, PyArray_Descr *to,
             from_order = dtype_kind_to_ordering(from->kind);
             to_order = dtype_kind_to_ordering(to->kind);
 
-            return from_order != -1 && from_order <= to_order;
+            if (to->kind == 'm') {
+                /* both types being timedelta is already handled before. */
+                int integer_order = dtype_kind_to_ordering('i');
+                return (from_order != -1) && (from_order <= integer_order);
+            }
+
+            return (from_order != -1) && (from_order <= to_order);
         }
         else {
             return 0;
@@ -973,6 +984,54 @@ PyArray_CanCastArrayTo(PyArrayObject *arr, PyArray_Descr *to,
     /* Otherwise, use the standard rules */
     return PyArray_CanCastTypeTo(from, to, casting);
 }
+
+
+NPY_NO_EXPORT const char *
+npy_casting_to_string(NPY_CASTING casting)
+{
+    switch (casting) {
+        case NPY_NO_CASTING:
+            return "'no'";
+        case NPY_EQUIV_CASTING:
+            return "'equiv'";
+        case NPY_SAFE_CASTING:
+            return "'safe'";
+        case NPY_SAME_KIND_CASTING:
+            return "'same_kind'";
+        case NPY_UNSAFE_CASTING:
+            return "'unsafe'";
+        default:
+            return "<unknown>";
+    }
+}
+
+
+/**
+ * Helper function to set a useful error when casting is not possible.
+ *
+ * @param src_dtype
+ * @param dst_dtype
+ * @param casting
+ * @param scalar Whether this was a "scalar" cast (includes 0-D array with
+ *               PyArray_CanCastArrayTo result).
+ */
+NPY_NO_EXPORT void
+npy_set_invalid_cast_error(
+        PyArray_Descr *src_dtype, PyArray_Descr *dst_dtype,
+        NPY_CASTING casting, npy_bool scalar)
+{
+    char *msg;
+
+    if (!scalar) {
+        msg = "Cannot cast array data from %R to %R according to the rule %s";
+    }
+    else {
+        msg = "Cannot cast scalar from %R to %R according to the rule %s";
+    }
+    PyErr_Format(PyExc_TypeError,
+            msg, src_dtype, dst_dtype, npy_casting_to_string(casting));
+}
+
 
 /*NUMPY_API
  * See if array scalars can be cast.
@@ -1360,8 +1419,7 @@ PyArray_PromoteTypes(PyArray_Descr *type1, PyArray_Descr *type2)
             }
             break;
         case NPY_TIMEDELTA:
-            if (PyTypeNum_ISINTEGER(type_num1) ||
-                            PyTypeNum_ISFLOAT(type_num1)) {
+            if (PyTypeNum_ISSIGNED(type_num1)) {
                 return ensure_dtype_nbo(type2);
             }
             break;
@@ -2115,15 +2173,19 @@ PyArray_ObjectType(PyObject *op, int minimum_type)
 
 /* Raises error when len(op) == 0 */
 
-/*NUMPY_API*/
+/*NUMPY_API
+ *
+ * This function is only used in one place within NumPy and should
+ * generally be avoided. It is provided mainly for backward compatibility.
+ *
+ * The user of the function has to free the returned array.
+ */
 NPY_NO_EXPORT PyArrayObject **
 PyArray_ConvertToCommonType(PyObject *op, int *retn)
 {
-    int i, n, allscalars = 0;
+    int i, n;
+    PyArray_Descr *common_descr = NULL;
     PyArrayObject **mps = NULL;
-    PyArray_Descr *intype = NULL, *stype = NULL;
-    PyArray_Descr *newtype = NULL;
-    NPY_SCALARKIND scalarkind = NPY_NOSCALAR, intypekind = NPY_NOSCALAR;
 
     *retn = n = PySequence_Length(op);
     if (n == 0) {
@@ -2159,94 +2221,41 @@ PyArray_ConvertToCommonType(PyObject *op, int *retn)
     }
 
     for (i = 0; i < n; i++) {
-        PyObject *otmp = PySequence_GetItem(op, i);
-        if (otmp == NULL) {
+        /* Convert everything to an array, this could be optimized away */
+        PyObject *tmp = PySequence_GetItem(op, i);
+        if (tmp == NULL) {
             goto fail;
         }
-        if (!PyArray_CheckAnyScalar(otmp)) {
-            newtype = PyArray_DescrFromObject(otmp, intype);
-            Py_DECREF(otmp);
-            Py_XDECREF(intype);
-            if (newtype == NULL) {
-                goto fail;
-            }
-            intype = newtype;
-            intypekind = PyArray_ScalarKind(intype->type_num, NULL);
-        }
-        else {
-            newtype = PyArray_DescrFromObject(otmp, stype);
-            Py_DECREF(otmp);
-            Py_XDECREF(stype);
-            if (newtype == NULL) {
-                goto fail;
-            }
-            stype = newtype;
-            scalarkind = PyArray_ScalarKind(newtype->type_num, NULL);
-            mps[i] = (PyArrayObject *)Py_None;
-            Py_INCREF(Py_None);
-        }
-    }
-    if (intype == NULL) {
-        /* all scalars */
-        allscalars = 1;
-        intype = stype;
-        Py_INCREF(intype);
-        for (i = 0; i < n; i++) {
-            Py_XDECREF(mps[i]);
-            mps[i] = NULL;
-        }
-    }
-    else if ((stype != NULL) && (intypekind != scalarkind)) {
-        /*
-         * we need to upconvert to type that
-         * handles both intype and stype
-         * also don't forcecast the scalars.
-         */
-        if (!PyArray_CanCoerceScalar(stype->type_num,
-                                     intype->type_num,
-                                     scalarkind)) {
-            newtype = PyArray_PromoteTypes(intype, stype);
-            Py_XDECREF(intype);
-            intype = newtype;
-            if (newtype == NULL) {
-                goto fail;
-            }
-        }
-        for (i = 0; i < n; i++) {
-            Py_XDECREF(mps[i]);
-            mps[i] = NULL;
-        }
-    }
 
-
-    /* Make sure all arrays are actual array objects. */
-    for (i = 0; i < n; i++) {
-        int flags = NPY_ARRAY_CARRAY;
-        PyObject *otmp = PySequence_GetItem(op, i);
-
-        if (otmp == NULL) {
-            goto fail;
-        }
-        if (!allscalars && ((PyObject *)(mps[i]) == Py_None)) {
-            /* forcecast scalars */
-            flags |= NPY_ARRAY_FORCECAST;
-            Py_DECREF(Py_None);
-        }
-        Py_INCREF(intype);
-        mps[i] = (PyArrayObject*)PyArray_FromAny(otmp, intype, 0, 0,
-                                                 flags, NULL);
-        Py_DECREF(otmp);
+        mps[i] = (PyArrayObject *)PyArray_FROM_O(tmp);
+        Py_DECREF(tmp);
         if (mps[i] == NULL) {
             goto fail;
         }
     }
-    Py_DECREF(intype);
-    Py_XDECREF(stype);
+
+    common_descr = PyArray_ResultType(n, mps, 0, NULL);
+    if (common_descr == NULL) {
+        goto fail;
+    }
+
+    /* Make sure all arrays are contiguous and have the correct dtype. */
+    for (i = 0; i < n; i++) {
+        int flags = NPY_ARRAY_CARRAY;
+        PyArrayObject *tmp = mps[i];
+
+        Py_INCREF(common_descr);
+        mps[i] = (PyArrayObject *)PyArray_FromArray(tmp, common_descr, flags);
+        Py_DECREF(tmp);
+        if (mps[i] == NULL) {
+            goto fail;
+        }
+    }
+    Py_DECREF(common_descr);
     return mps;
 
  fail:
-    Py_XDECREF(intype);
-    Py_XDECREF(stype);
+    Py_XDECREF(common_descr);
     *retn = 0;
     for (i = 0; i < n; i++) {
         Py_XDECREF(mps[i]);

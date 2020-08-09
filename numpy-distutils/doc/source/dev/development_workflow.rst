@@ -26,7 +26,7 @@ In short:
    - *Contributors*: push your feature branch to your own Github repo, and
      :ref:`create a pull request <asking-for-merging>`.
 
-   - *Core developers* If you want to push changes without
+   - *Core developers*: If you want to push changes without
      further review, see the notes :ref:`below <pushing-to-main>`.
 
 This way of working helps to keep work well organized and the history
@@ -303,7 +303,7 @@ Suppose that the commit history looks like this::
     2dec1ac Fix a few bugs + disable
     13d7934 First implementation
     6ad92e5 * masked is now an instance of a new object, MaskedConstant
-    29001ed Add pre-nep for a copule of structured_array_extensions.
+    29001ed Add pre-nep for a couple of structured_array_extensions.
     ...
 
 and ``6ad92e5`` is the last commit in the ``master`` branch. Suppose we
@@ -377,10 +377,10 @@ Deleting a branch on github_
    # delete branch locally
    git branch -D my-unwanted-branch
    # delete branch on github
-   git push origin :my-unwanted-branch
+   git push origin --delete my-unwanted-branch
 
-(Note the colon ``:`` before ``test-branch``.  See also:
-https://github.com/guides/remove-a-remote-branch
+See also:
+https://stackoverflow.com/questions/2003505/how-do-i-delete-a-git-branch-locally-and-remotely
 
 
 Several people sharing a single repository
@@ -477,7 +477,7 @@ backport.
 Pushing changes to the main repo
 ================================
 
-*This is only relevant if you have commit rights to the main NumPy repo.*
+*Requires commit rights to the main NumPy repo.*
 
 When you have a set of "ready" changes in a feature branch ready for
 NumPy's ``master`` or ``maintenance`` branches, you can push

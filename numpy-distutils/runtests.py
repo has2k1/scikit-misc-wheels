@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 runtests.py [OPTIONS] [-- ARGS]
 
@@ -29,8 +29,6 @@ Generate C code coverage listing under build/lcov/:
     $ python runtests.py --lcov-html
 
 """
-from __future__ import division, print_function
-
 #
 # This is a generic test runner script for projects using NumPy's test
 # framework. Change the following values to adapt to your project:
@@ -116,6 +114,12 @@ def main(argv):
                         help="Number of parallel jobs during build")
     parser.add_argument("--warn-error", action="store_true",
                         help="Set -Werror to convert all compiler warnings to errors")
+    parser.add_argument("--cpu-baseline", default=None,
+                        help="Specify a list of enabled baseline CPU optimizations"),
+    parser.add_argument("--cpu-dispatch", default=None,
+                        help="Specify a list of dispatched CPU optimizations"),
+    parser.add_argument("--disable-optimization", action="store_true",
+                        help="Disable CPU optimized code(dispatch,simd,fast...)"),
     parser.add_argument("--show-build-log", action="store_true",
                         help="Show build output rather than using a log file")
     parser.add_argument("--bench", action="store_true",
@@ -127,7 +131,7 @@ def main(argv):
                               "COMMIT. Note that you need to commit your "
                               "changes first!"))
     parser.add_argument("args", metavar="ARGS", default=[], nargs=REMAINDER,
-                        help="Arguments to pass to Nose, Python or shell")
+                        help="Arguments to pass to Nose, asv, Python or shell")
     args = parser.parse_args(argv)
 
     if args.durations < 0:
@@ -164,8 +168,10 @@ def main(argv):
         site_dir = os.path.sep.join(_temp.__file__.split(os.path.sep)[:-2])
 
     extra_argv = args.args[:]
-    if extra_argv and extra_argv[0] == '--':
-        extra_argv = extra_argv[1:]
+    if not args.bench:
+        # extra_argv may also lists selected benchmarks
+        if extra_argv and extra_argv[0] == '--':
+            extra_argv = extra_argv[1:]
 
     if args.python:
         # Debugging issues with warnings is much easier if you can see them
@@ -183,7 +189,7 @@ def main(argv):
             sys.modules['__main__'] = types.ModuleType('__main__')
             ns = dict(__name__='__main__',
                       __file__=extra_argv[0])
-            exec_(script, ns)
+            exec(script, ns)
             sys.exit(0)
         else:
             import code
@@ -222,13 +228,21 @@ def main(argv):
 
     if args.bench:
         # Run ASV
-        items = extra_argv
+        for i, v in enumerate(extra_argv):
+            if v.startswith("--"):
+                items = extra_argv[:i]
+                if v == "--":
+                    i += 1  # skip '--' indicating further are passed on.
+                bench_args = extra_argv[i:]
+                break
+        else:
+            items = extra_argv
+            bench_args = []
+
         if args.tests:
             items += args.tests
         if args.submodule:
             items += [args.submodule]
-
-        bench_args = []
         for a in items:
             bench_args.extend(['--bench', a])
 
@@ -380,6 +394,12 @@ def build_project(args):
         cmd += ["build_src", "--verbose-cfg"]
     if args.warn_error:
         cmd += ["--warn-error"]
+    if args.cpu_baseline:
+        cmd += ["--cpu-baseline", args.cpu_baseline]
+    if args.cpu_dispatch:
+        cmd += ["--cpu-dispatch", args.cpu_dispatch]
+    if args.disable_optimization:
+        cmd += ["--disable-optimization"]
     # Install; avoid producing eggs so numpy can be imported from dst_dir.
     cmd += ['install', '--prefix=' + dst_dir,
             '--single-version-externally-managed',
@@ -480,26 +500,6 @@ def lcov_generate():
     else:
         print("HTML output generated under build/lcov/")
 
-
-#
-# Python 3 support
-#
-
-if sys.version_info[0] >= 3:
-    import builtins
-    exec_ = getattr(builtins, "exec")
-else:
-    def exec_(code, globs=None, locs=None):
-        """Execute code in a namespace."""
-        if globs is None:
-            frame = sys._getframe(1)
-            globs = frame.f_globals
-            if locs is None:
-                locs = frame.f_locals
-            del frame
-        elif locs is None:
-            locs = globs
-        exec("""exec code in globs, locs""")
 
 if __name__ == "__main__":
     main(argv=sys.argv[1:])

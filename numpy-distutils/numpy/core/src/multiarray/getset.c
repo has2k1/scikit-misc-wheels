@@ -13,6 +13,7 @@
 #include "npy_import.h"
 
 #include "common.h"
+#include "conversion_utils.h"
 #include "ctors.h"
 #include "scalartypes.h"
 #include "descriptor.h"
@@ -20,7 +21,7 @@
 #include "arrayobject.h"
 #include "mem_overlap.h"
 #include "alloc.h"
-#include "buffer.h"
+#include "npy_buffer.h"
 
 /*******************  array attribute get and set routines ******************/
 
@@ -62,33 +63,39 @@ array_shape_set(PyArrayObject *self, PyObject *val)
     if (PyArray_DATA(ret) != PyArray_DATA(self)) {
         Py_DECREF(ret);
         PyErr_SetString(PyExc_AttributeError,
-                        "incompatible shape for a non-contiguous "\
-                        "array");
+                        "Incompatible shape for in-place modification. Use "
+                        "`.reshape()` to make a copy with the desired shape.");
         return -1;
     }
 
-    /* Free old dimensions and strides */
-    npy_free_cache_dim_array(self);
     nd = PyArray_NDIM(ret);
-    ((PyArrayObject_fields *)self)->nd = nd;
     if (nd > 0) {
         /* create new dimensions and strides */
-        ((PyArrayObject_fields *)self)->dimensions = npy_alloc_cache_dim(2 * nd);
-        if (PyArray_DIMS(self) == NULL) {
+        npy_intp *_dimensions = npy_alloc_cache_dim(2 * nd);
+        if (_dimensions == NULL) {
             Py_DECREF(ret);
-            PyErr_SetString(PyExc_MemoryError,"");
+            PyErr_NoMemory();
             return -1;
         }
-        ((PyArrayObject_fields *)self)->strides = PyArray_DIMS(self) + nd;
+        /* Free old dimensions and strides */
+        npy_free_cache_dim_array(self);
+        ((PyArrayObject_fields *)self)->nd = nd;
+        ((PyArrayObject_fields *)self)->dimensions = _dimensions; 
+        ((PyArrayObject_fields *)self)->strides = _dimensions + nd;
+
         if (nd) {
             memcpy(PyArray_DIMS(self), PyArray_DIMS(ret), nd*sizeof(npy_intp));
             memcpy(PyArray_STRIDES(self), PyArray_STRIDES(ret), nd*sizeof(npy_intp));
         }
     }
     else {
+        /* Free old dimensions and strides */
+        npy_free_cache_dim_array(self);        
+        ((PyArrayObject_fields *)self)->nd = 0;
         ((PyArrayObject_fields *)self)->dimensions = NULL;
         ((PyArrayObject_fields *)self)->strides = NULL;
     }
+
     Py_DECREF(ret);
     PyArray_UpdateFlags(self, NPY_ARRAY_C_CONTIGUOUS | NPY_ARRAY_F_CONTIGUOUS);
     return 0;
@@ -104,26 +111,21 @@ array_strides_get(PyArrayObject *self)
 static int
 array_strides_set(PyArrayObject *self, PyObject *obj)
 {
-    PyArray_Dims newstrides = {NULL, 0};
+    PyArray_Dims newstrides = {NULL, -1};
     PyArrayObject *new;
     npy_intp numbytes = 0;
     npy_intp offset = 0;
     npy_intp lower_offset = 0;
     npy_intp upper_offset = 0;
-#if defined(NPY_PY3K)
     Py_buffer view;
-#else
-    Py_ssize_t buf_len;
-    char *buf;
-#endif
 
     if (obj == NULL) {
         PyErr_SetString(PyExc_AttributeError,
                 "Cannot delete array strides");
         return -1;
     }
-    if (!PyArray_IntpConverter(obj, &newstrides) ||
-        newstrides.ptr == NULL) {
+    if (!PyArray_OptionalIntpConverter(obj, &newstrides) ||
+        newstrides.len == -1) {
         PyErr_SetString(PyExc_TypeError, "invalid strides");
         return -1;
     }
@@ -140,22 +142,12 @@ array_strides_set(PyArrayObject *self, PyObject *obj)
      * Get the available memory through the buffer interface on
      * PyArray_BASE(new) or if that fails from the current new
      */
-#if defined(NPY_PY3K)
     if (PyArray_BASE(new) &&
             PyObject_GetBuffer(PyArray_BASE(new), &view, PyBUF_SIMPLE) >= 0) {
         offset = PyArray_BYTES(self) - (char *)view.buf;
         numbytes = view.len + offset;
         PyBuffer_Release(&view);
-        _dealloc_cached_buffer_info((PyObject*)new);
     }
-#else
-    if (PyArray_BASE(new) &&
-            PyObject_AsReadBuffer(PyArray_BASE(new), (const void **)&buf,
-                                  &buf_len) >= 0) {
-        offset = PyArray_BYTES(self) - buf;
-        numbytes = buf_len + offset;
-    }
-#endif
     else {
         PyErr_Clear();
         offset_bounds_from_strides(PyArray_ITEMSIZE(new), PyArray_NDIM(new),
@@ -286,31 +278,56 @@ array_interface_get(PyArrayObject *self)
         Py_DECREF(dict);
         return NULL;
     }
+    int ret;
 
     /* dataptr */
     obj = array_dataptr_get(self);
-    PyDict_SetItemString(dict, "data", obj);
+    ret = PyDict_SetItemString(dict, "data", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     obj = array_protocol_strides_get(self);
-    PyDict_SetItemString(dict, "strides", obj);
+    ret = PyDict_SetItemString(dict, "strides", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     obj = array_protocol_descr_get(self);
-    PyDict_SetItemString(dict, "descr", obj);
+    ret = PyDict_SetItemString(dict, "descr", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     obj = arraydescr_protocol_typestr_get(PyArray_DESCR(self));
-    PyDict_SetItemString(dict, "typestr", obj);
+    ret = PyDict_SetItemString(dict, "typestr", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     obj = array_shape_get(self);
-    PyDict_SetItemString(dict, "shape", obj);
+    ret = PyDict_SetItemString(dict, "shape", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     obj = PyInt_FromLong(3);
-    PyDict_SetItemString(dict, "version", obj);
+    ret = PyDict_SetItemString(dict, "version", obj);
     Py_DECREF(obj);
+    if (ret < 0) {
+        Py_DECREF(dict);
+        return NULL;
+    }
 
     return dict;
 }
@@ -318,23 +335,7 @@ array_interface_get(PyArrayObject *self)
 static PyObject *
 array_data_get(PyArrayObject *self)
 {
-#if defined(NPY_PY3K)
     return PyMemoryView_FromObject((PyObject *)self);
-#else
-    npy_intp nbytes;
-    if (!(PyArray_ISONESEGMENT(self))) {
-        PyErr_SetString(PyExc_AttributeError, "cannot get single-"\
-                        "segment buffer for discontiguous array");
-        return NULL;
-    }
-    nbytes = PyArray_NBYTES(self);
-    if (PyArray_ISWRITEABLE(self)) {
-        return PyBuffer_FromReadWriteObject((PyObject *)self, 0, (Py_ssize_t) nbytes);
-    }
-    else {
-        return PyBuffer_FromObject((PyObject *)self, 0, (Py_ssize_t) nbytes);
-    }
-#endif
 }
 
 static int
@@ -343,9 +344,7 @@ array_data_set(PyArrayObject *self, PyObject *op)
     void *buf;
     Py_ssize_t buf_len;
     int writeable=1;
-#if defined(NPY_PY3K)
     Py_buffer view;
-#endif
 
     /* 2016-19-02, 1.12 */
     int ret = DEPRECATE("Assigning the 'data' attribute is an "
@@ -360,7 +359,6 @@ array_data_set(PyArrayObject *self, PyObject *op)
                 "Cannot delete array data");
         return -1;
     }
-#if defined(NPY_PY3K)
     if (PyObject_GetBuffer(op, &view, PyBUF_WRITABLE|PyBUF_SIMPLE) < 0) {
         writeable = 0;
         PyErr_Clear();
@@ -377,19 +375,7 @@ array_data_set(PyArrayObject *self, PyObject *op)
      * sticks around after the release.
      */
     PyBuffer_Release(&view);
-    _dealloc_cached_buffer_info(op);
-#else
-    if (PyObject_AsWriteBuffer(op, &buf, &buf_len) < 0) {
-        PyErr_Clear();
-        writeable = 0;
-        if (PyObject_AsReadBuffer(op, (const void **)&buf, &buf_len) < 0) {
-            PyErr_Clear();
-            PyErr_SetString(PyExc_AttributeError,
-                    "object does not have single-segment buffer interface");
-            return -1;
-        }
-    }
-#endif
+
     if (!PyArray_ISONESEGMENT(self)) {
         PyErr_SetString(PyExc_AttributeError,
                 "cannot set single-segment buffer for discontiguous array");
