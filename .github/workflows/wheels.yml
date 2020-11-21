@@ -1,0 +1,95 @@
+# Ref: https://github.com/python-pillow/pillow-wheels/blob/master/.github/workflows/wheels.yml
+name: Wheels
+
+
+on: [push, pull_request]
+
+env:
+  REPO_DIR: scikit-misc
+  BUILD_COMMIT: v0.1.3
+  CYTHON_BUILD_DEP: "Cython==0.29.18"
+  PYBIND11_BUILD_DEP: "pybind11==2.4.3"
+  UNICODE_WIDTH: 32
+  WHEELHOUSE_UPLOADER_USERNAME: travis-worker
+  BUILD_DIR: ${{ github.workspace }}
+  GHA_DEPLOY_KEY: ${{ secrets.GHA_DEPLOY_KEY }}
+  OTHER_TEST_DEPS: "pytest"
+
+jobs:
+  build:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Ensure that a wheel builder finishes even if another fails
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-16.04", macos-latest]
+        platform: [x86_64, i686]
+        python-version: [3.8]
+        # [3.6, 3.7, 3.8, 3.9]
+        include:
+          # Numpy versions depend on python version
+          # - python-version: 3.6
+          #   numpy-version: 1.14.6
+          # - python-version: 3.7
+          #   numpy-version: 1.16.5
+          - python-version: 3.8
+            numpy-version: 1.17.3
+          # - python-version: 3.9
+          #   numpy-version: 1.19.1
+
+          # Use OS names as understood by multibuild
+          - os: "ubuntu-16.04"
+            os-name: "xenial"
+          - os: "macos-latest"
+            os-name: "osx"
+
+        exclude:
+          # macosx does not run on i686
+          - os: "macos-latest"
+            platform: i686
+    env:
+      PLAT: ${{ matrix.platform }}
+      TRAVIS_OS_NAME: ${{ matrix.os-name }}
+      MB_PYTHON_VERSION: ${{ matrix.python-version }}
+      NP_BUILD_DEP: numpy==${{ matrix.numpy-version }}
+      NP_TEST_DEP: numpy==${{ matrix.numpy-version }}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build Wheel
+        shell: bash -x -l {0}
+        run: source .github/workflows/build.sh
+      - name: List files
+        shell: bash -l {0}
+        run : |
+          ls -la
+          ls -la wheelhouse
+      - name: Upload Wheel
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheel
+          path: wheelhouse/*
+
+  collect-wheels:
+    name: Collect Wheels
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all workflow run artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: wheel
+          path: wheelhouse
+      - name: List files
+        shell: bash -l {0}
+        run : |
+          ls -la
+          ls -la wheelhouse
+          ls -la wheelhouse/*/

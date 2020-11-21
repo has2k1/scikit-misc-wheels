@@ -20,12 +20,11 @@ function build_wheel {
 
 # From https://github.com/MacPython/scipy-wheels
 function build_libs {
-    local plat=${1:-$PLAT}
-    local tar_path=$(abspath $(get_gf_lib "openblas-${OPENBLAS_VERSION}" "$plat"))
-    # Sudo needed for macOS
-    local use_sudo=""
-    [ -n "$IS_OSX" ] && use_sudo="sudo"
-    (cd / && $use_sudo tar zxf $tar_path)
+    PYTHON_EXE=`which python`
+    $PYTHON_EXE -c"import platform; print('platform.uname().machine', platform.uname().machine)"
+    basedir=$($PYTHON_EXE openblas_support.py)
+    $use_sudo cp -r $basedir/lib/* /usr/local/lib
+    $use_sudo cp $basedir/include/* /usr/local/include
 }
 
 # used by build_osx_wheel
@@ -64,7 +63,8 @@ function build_osx_wheel {
     # Work round build dependencies spec in pyproject.toml
     # See e.g.
     # https://travis-ci.org/matthew-brett/scipy-wheels/jobs/387794282
-    build_wheel_cmd "build_wheel_with_patch" "$repo_dir"
+    build_bdist_wheel "$repo_dir"
+    # build_wheel_cmd "build_wheel_with_patch" "$repo_dir"
 }
 
 function run_tests {
@@ -73,7 +73,7 @@ function run_tests {
     pip list
     test_cmd="import sys, skmisc; sys.exit(skmisc.test())"
 
-    if [ -n "$IS_OSX" ]; then
+    if [[ -n "$IS_OSX" && `uname -m` != 'aarch64' ]]; then
         arch -x86_64 python -c "$test_cmd"
     else
         python -c "$test_cmd"

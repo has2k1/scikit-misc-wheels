@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Auto-deploy with Travis
+# Auto-deploy with Github Actions
 # Credit: https://gist.github.com/domenic/ec8b0fc8ab45f39403dd
 set -o xtrace  # Print command traces before executing command
 set -e # Exit with nonzero exit code if anything fails
@@ -9,14 +9,12 @@ echo $BASH_VERSION  # For debugging
 TARGET_BRANCH="wheelhouse"
 COMMIT_AUTHOR_NAME=$(git --no-pager show -s --format='%an')
 COMMIT_AUTHOR_EMAIL=$(git --no-pager show -s --format='%ae')
-ENCRYPTED_DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key.enc"
-DEPLOY_KEY_FILE="$TRAVIS_BUILD_DIR/tools/deploy_key"
-# No of entries in the matrix.include section of .travis.yml
-BUILD_MATRIX_SIZE=9
+ENCRYPTED_DEPLOY_KEY_FILE="$BUILD_DIR/tools/deploy_key.enc"
+DEPLOY_KEY_FILE="$BUILD_DIR/tools/deploy_key"
 # Commits are assembled in the working directory
 WORKING_DIR="/tmp/commit_wheel"
 # where the build script put the wheel(s)
-WHEELHOUSE_DIRECTORY="$TRAVIS_BUILD_DIR/wheelhouse"
+WHEELHOUSE_DIRECTORY="$BUILD_DIR/wheelhouse"
 LOCAL_REPO="$WORKING_DIR/$TARGET_BRANCH"
 
 # Process the filename of the wheel to get the version
@@ -28,57 +26,21 @@ WHEEL_VERSION=$(echo $wheel_filename | cut -d '-' -f 2)
 WHEEL_COMMIT_DIRECTORY=$WHEEL_VERSION
 COMMIT_MSG="${WHEEL_VERSION} ($(date +%Y-%m-%d:%H:%M:%S))"
 
-# Get the deploy key by using Travis's stored variables to decrypt deploy_key.enc
-ENCRYPTED_KEY_VAR="encrypted_${ENCRYPTION_LABEL}_key"
-ENCRYPTED_IV_VAR="encrypted_${ENCRYPTION_LABEL}_iv"
-ENCRYPTED_KEY=${!ENCRYPTED_KEY_VAR}
-ENCRYPTED_IV=${!ENCRYPTED_IV_VAR}
-
 # Save some useful information
 REPO=`git config remote.origin.url`
 SSH_REPO=${REPO/https:\/\/github.com\//git@github.com:}
 
-# Hack. When the builds compete to update the remote origin,
-# some pushes may fail. In that case we pull-rebase and then
-# try to push again.
-function push_pull_rebase {
-   N=$BUILD_MATRIX_SIZE
-   PUSH_CMD="git push origin $TARGET_BRANCH:$TARGET_BRANCH"
-
-   for (( i=1; i<=$N; i++ )); do
-      # Command does not fail, script does not exit
-      # yet we still get the error code. :)
-      error_code=$(eval $PUSH_CMD || echo $?)
-      if [[ $error_code -eq 0 ]]; then
-         break
-      elif [[ ! $i -eq $N ]]; then
-         # Staggering the re-pushes over some time
-         # should reduce the potential for conflicts
-         sleep "$((1 + RANDOM % $N*2))s"
-
-         # One of the other parallel builds beat this
-         # build to the update, so commit goes on top
-         git pull --rebase=true origin $TARGET_BRANCH
-      else
-         echo "$PUSH_CMD -- FAILED"
-         exit 1
-      fi
-   done
-}
-
-openssl aes-256-cbc -K $ENCRYPTED_KEY -iv $ENCRYPTED_IV \
-   -in $ENCRYPTED_DEPLOY_KEY_FILE -out $DEPLOY_KEY_FILE -d
-
-chmod 600 $DEPLOY_KEY_FILE
 eval `ssh-agent -s`
-ssh-add $DEPLOY_KEY_FILE
+echo "$GHA_DEPLOY_KEY" | ssh-add -
+mkdir -p ~/.ssh/
+ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 mkdir $WORKING_DIR
 
 # Clone the existing wheelhouse for this repo into out/
 # Create a new empty branch if gh-pages doesn't exist
 # yet (should only happen on first deply)
-git clone --depth=3 --branch=$TARGET_BRANCH $SSH_REPO $LOCAL_REPO || true
+git clone --depth=2 --branch=$TARGET_BRANCH $SSH_REPO $LOCAL_REPO || true
 if [[ -d $LOCAL_REPO ]]; then
    pushd $LOCAL_REPO
 else
@@ -101,7 +63,7 @@ fi
 cp -a "$WHEELHOUSE_DIRECTORY/." "$WHEEL_COMMIT_DIRECTORY/"
 
 # Now let's go have some fun with the cloned repo
-git config user.name "$COMMIT_AUTHOR_NAME via Travis CI"
+git config user.name "$COMMIT_AUTHOR_NAME  [GA Commit Wheel]"
 git config user.email "$COMMIT_AUTHOR_EMAIL"
 git config --local -l
 
@@ -115,8 +77,10 @@ if [ -z `git diff --cached --exit-code --shortstat` ]; then
 fi
 
 git commit -m "$COMMIT_MSG"
+git pull --rebase=true origin $TARGET_BRANCH
 
-push_pull_rebase
+git push origin "$TARGET_BRANCH:$TARGET_BRANCH"
+ssh-agent -k
 
 popd
 rm -rf $WORKING_DIRECTORY
