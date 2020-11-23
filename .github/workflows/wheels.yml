@@ -2,7 +2,12 @@
 name: Wheels
 
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - dev
+      - master
+      - gh-actions
 
 env:
   REPO_DIR: scikit-misc
@@ -14,6 +19,9 @@ env:
   BUILD_DIR: ${{ github.workspace }}
   GHA_DEPLOY_KEY: ${{ secrets.GHA_DEPLOY_KEY }}
   OTHER_TEST_DEPS: "pytest"
+  WHEELHOUSE_DIR: "${{ github.workspace }}/../wheelhouse"
+  COMMIT_TOOLS_DIR: "${{ github.workspace }}/../commit_tools"
+  WHEELS_BRANCH: "wheelhouse"
 
 jobs:
   build:
@@ -25,18 +33,17 @@ jobs:
       matrix:
         os: ["ubuntu-16.04", macos-latest]
         platform: [x86_64, i686]
-        python-version: [3.8]
-        # [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.6, 3.7, 3.8, 3.9]
         include:
           # Numpy versions depend on python version
-          # - python-version: 3.6
-          #   numpy-version: 1.14.6
-          # - python-version: 3.7
-          #   numpy-version: 1.16.5
+          - python-version: 3.6
+            numpy-version: 1.14.6
+          - python-version: 3.7
+            numpy-version: 1.16.5
           - python-version: 3.8
             numpy-version: 1.17.3
-          # - python-version: 3.9
-          #   numpy-version: 1.19.1
+          - python-version: 3.9
+            numpy-version: 1.19.1
 
           # Use OS names as understood by multibuild
           - os: "ubuntu-16.04"
@@ -64,7 +71,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Build Wheel
-        shell: bash -x -l {0}
+        shell: bash -l {0}
         run: source .github/workflows/build.sh
       - name: List files
         shell: bash -l {0}
@@ -78,18 +85,34 @@ jobs:
           path: wheelhouse/*
 
   collect-wheels:
+    if: ${{ always() }}
     name: Collect Wheels
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download all workflow run artifacts
+      - name: Download all wheels
         uses: actions/download-artifact@v2
         with:
           name: wheel
-          path: wheelhouse
-      - name: List files
+          path: "${{ env.WHEELHOUSE_DIR }}"
+
+      - name: Contents of wheelhouse directory
         shell: bash -l {0}
-        run : |
-          ls -la
-          ls -la wheelhouse
-          ls -la wheelhouse/*/
+        run: ls -la "$WHEELHOUSE_DIR"
+
+      - name: Checkout main repository
+        uses: actions/checkout@v2
+
+      - name: Copy commit tools from main repository
+        run: |
+          mkdir -p "$COMMIT_TOOLS_DIR"
+          cp tools/commit_wheels.sh "$COMMIT_TOOLS_DIR"
+
+      - name: Checkout wheelhouse branch
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.WHEELS_BRANCH }}
+
+      - name: Commit wheels
+        shell: bash -l {0}
+        run : source "$COMMIT_TOOLS_DIR/commit_wheels.sh"
