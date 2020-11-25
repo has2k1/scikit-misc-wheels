@@ -34,10 +34,6 @@ COMMIT_MSG="${WHEEL_VERSION} ($(date +%Y-%m-%d:%H:%M:%S))"
 mkdir -p "$WHEEL_COMMIT_DIR"
 cp -a "$WHEELHOUSE_DIR/." "$WHEEL_COMMIT_DIR/"
 
-# Fetch
-git fetch origin "$WHEELS_BRANCH"
-git checkout "$WHEELS_BRANCH"
-
 # Configure commit information
 git config user.name "$COMMIT_AUTHOR_NAME  [GA Commit Wheel]"
 git config user.email "$COMMIT_AUTHOR_EMAIL"

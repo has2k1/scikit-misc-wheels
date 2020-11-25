@@ -17,7 +17,6 @@ env:
   UNICODE_WIDTH: 32
   WHEELHOUSE_UPLOADER_USERNAME: travis-worker
   BUILD_DIR: ${{ github.workspace }}
-  GHA_DEPLOY_KEY: ${{ secrets.GHA_DEPLOY_KEY }}
   OTHER_TEST_DEPS: "pytest"
   WHEELHOUSE_DIR: "${{ github.workspace }}/../wheelhouse"
   COMMIT_TOOLS_DIR: "${{ github.workspace }}/../commit_tools"
@@ -25,6 +24,7 @@ env:
 
 jobs:
   build:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -75,9 +75,7 @@ jobs:
         run: source .github/workflows/build.sh
       - name: List files
         shell: bash -l {0}
-        run : |
-          ls -la
-          ls -la wheelhouse
+        run : ls -la wheelhouse
       - name: Upload Wheel
         uses: actions/upload-artifact@v2
         with:
@@ -85,7 +83,7 @@ jobs:
           path: wheelhouse/*
 
   collect-wheels:
-    if: ${{ always() }}
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
     name: Collect Wheels
     needs: build
     runs-on: ubuntu-latest
