@@ -5,16 +5,14 @@ source gfortran-install/gfortran_utils.sh
 
 # From https://github.com/MacPython/scipy-wheels
 function build_wheel {
+    export FFLAGS="$FFLAGS -fPIC"
     if [ -z "$IS_OSX" ]; then
-        unset FFLAGS
-        export LDFLAGS="-shared -Wl,-strip-all"
         build_libs $PLAT
-        # build_pip_wheel does not work with versioneer
-        # https://github.com/matthew-brett/multibuild/issues/11
-        build_pip_wheel $@
+        # Work round build dependencies spec in pyproject.toml
+        build_bdist_wheel $@
     else
-        export FFLAGS="$FFLAGS -fPIC"
-        build_osx_wheel $@
+        install_gfortran
+        wrap_wheel_builder build_osx_wheel $@
     fi
 }
 
@@ -23,19 +21,9 @@ function build_libs {
     PYTHON_EXE=`which python`
     $PYTHON_EXE -c"import platform; print('platform.uname().machine', platform.uname().machine)"
     basedir=$($PYTHON_EXE openblas_support.py)
-    $use_sudo cp -r $basedir/lib/* /usr/local/lib
-    $use_sudo cp $basedir/include/* /usr/local/include
-}
-
-# used by build_osx_wheel
-function set_arch {
-    local arch=$1
-    export CC="clang $arch"
-    export CXX="clang++ $arch"
-    export CFLAGS="$arch"
-    export FFLAGS="$arch"
-    export FARCH="$arch"
-    export LDFLAGS="$arch"
+    $use_sudo cp -r $basedir/lib/* $BUILD_PREFIX/lib
+    $use_sudo cp $basedir/include/* $BUILD_PREFIX/include
+    export OPENBLAS=$BUILD_PREFIX
 }
 
 # From https://github.com/MacPython/scipy-wheels
@@ -47,19 +35,14 @@ function build_wheel_with_patch {
 
 # From https://github.com/MacPython/scipy-wheels
 function build_osx_wheel {
-    # Build 64-bit wheel
-    # Standard gfortran won't build dual arch objects.
     local repo_dir=${1:-$REPO_DIR}
-    local py_ld_flags="-Wall -undefined dynamic_lookup -bundle"
 
-    install_gfortran
-    # 64-bit wheel
-    local arch="-m64"
-    set_arch $arch
-    build_libs x86_64
-    # Build wheel
-    export LDSHARED="$CC $py_ld_flags"
-    export LDFLAGS="$arch $py_ld_flags"
+    if [ ! -z "$FC" ]; then
+       export F77=$FC
+       export F90=$FC
+    fi
+    build_libs
+
     # Work round build dependencies spec in pyproject.toml
     # See e.g.
     # https://travis-ci.org/matthew-brett/scipy-wheels/jobs/387794282
@@ -72,12 +55,6 @@ function run_tests {
     python --version
     pip list
     test_cmd="import sys, skmisc; sys.exit(skmisc.test())"
-
-    if [[ -n "$IS_OSX" && `uname -m` != 'aarch64' ]]; then
-        arch -x86_64 python -c "$test_cmd"
-    else
-        python -c "$test_cmd"
-    fi
-
+    python -c "$test_cmd"
     python -c "import skmisc; skmisc.show_config()"
 }
