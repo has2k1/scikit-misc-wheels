@@ -1,4 +1,4 @@
-# Ref: https://github.com/python-pillow/pillow-wheels/blob/master/.github/workflows/wheels.yml
+# Ref: https://github.com/python-pillow/pillow-wheels/blob/main/.github/workflows/wheels.yml
 name: Wheels
 
 
@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - dev
-      - master
+      - main
       - gh-actions
 
 env:
