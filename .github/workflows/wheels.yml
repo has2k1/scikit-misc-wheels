@@ -78,7 +78,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build Wheel
         shell: bash -l {0}
-        run: source .github/workflows/build.sh
+        run: |
+          # ref: https://github.com/buildout/buildout.wheel/issues/18#issuecomment-748858329
+          pip install "wheel==0.34.1"
+          pip install --upgrade pip
+          source .github/workflows/build.sh
       - name: List files
         shell: bash -l {0}
         run : ls -la wheelhouse
