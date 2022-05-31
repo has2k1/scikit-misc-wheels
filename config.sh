@@ -11,6 +11,9 @@ function build_wheel {
         # Work round build dependencies spec in pyproject.toml
         build_bdist_wheel $@
     else
+        # Ref: https://github.com/scipy/scipy/issues/14829
+        # solution: https://github.com/scipy/scipy/pull/14831/files
+        export LIBRARY_PATH="$LIBRARY_PATH:/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib"
         install_gfortran
         wrap_wheel_builder build_osx_wheel $@
     fi
