@@ -1,5 +1,5 @@
 # Environment variables for build
-OPENBLAS_VERSION="v0.3.7"
+OPENBLAS_VERSION="v0.3.18"
 MACOSX_DEPLOYMENT_TARGET=10.9
 
 # Enable Python fault handler on Pythons >= 3.3.
