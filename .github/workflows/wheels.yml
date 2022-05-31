@@ -1,7 +1,6 @@
 # Ref: https://github.com/python-pillow/pillow-wheels/blob/main/.github/workflows/wheels.yml
 name: Wheels
 
-
 on:
   workflow_dispatch:
   push:

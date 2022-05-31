@@ -37,7 +37,7 @@ jobs:
       MB_PYTHON_VERSION: ${{ matrix.python-version }}
       NP_BUILD_DEP: oldest-supported-numpy
       NP_TEST_DEP: oldest-supported-numpy
-      BUILD_COMMIT: ${{ inputs.build-commit }}
+      BUILD_COMMIT: "${{ inputs.build-commit }}"
 
     steps:
       - uses: actions/checkout@v3
@@ -50,8 +50,6 @@ jobs:
       - name: Build Wheel
         shell: bash -l {0}
         run: |
-          # ref: https://github.com/buildout/buildout.wheel/issues/18#issuecomment-748858329
-          pip install "wheel==0.34.1"
           pip install --upgrade pip
           source .github/workflows/build.sh
       - name: List files
