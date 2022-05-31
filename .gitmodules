@@ -9,4 +9,4 @@
 	url = https://github.com/MacPython/gfortran-install
 [submodule "numpy-distutils"]
 	path = numpy-distutils
-	url = git@github.com:numpy/numpy.git
+	url = https://github.com/numpy/numpy.git
