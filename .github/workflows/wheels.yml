@@ -11,81 +11,37 @@ on:
       - gh-actions
 
 env:
-  REPO_DIR: scikit-misc
-  BUILD_COMMIT: v0.1.4
-  CYTHON_BUILD_DEP: "Cython==0.29.24"
-  PYBIND11_BUILD_DEP: "pybind11>=2.4.3"
-  UNICODE_WIDTH: 32
-  BUILD_DIR: ${{ github.workspace }}
-  OTHER_TEST_DEPS: "pytest"
-  WHEELHOUSE_DIR: "${{ github.workspace }}/../wheelhouse"
+  # BUILD_COMMIT: v0.1.4
   COMMIT_TOOLS_DIR: "${{ github.workspace }}/../commit_tools"
   WHEELS_BRANCH: "wheelhouse"
+  WHEELHOUSE_DIR: "${{ github.workspace }}/../wheelhouse"
 
 jobs:
-  build:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    name: "${{ matrix.os }} / ${{ matrix.python-version }} / ${{ matrix.platform }}"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # Ensure that a wheel builder finishes even if another fails
-      fail-fast: false
-      matrix:
-        os: ["macos-latest"]
-        platform: [x86_64, i686]
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
-        macos-target: ["10.10"]
-        include:
-          # Use OS names as understood by multibuild
-          - os: "ubuntu-20.04"
-            os-name: "xenial"
-          - os: "macos-latest"
-            os-name: "osx"
-        exclude:
-          # macosx does not run on i686
-          - os: "macos-latest"
-            platform: i686
-    env:
-      PLAT: ${{ matrix.platform }}
-      TRAVIS_OS_NAME: ${{ matrix.os-name }}
-      MB_PYTHON_VERSION: ${{ matrix.python-version }}
-      NP_BUILD_DEP: oldest-supported-numpy
-      NP_TEST_DEP: oldest-supported-numpy
+  linux:
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
+    uses: ./.github/workflows/wheels-linux.yml
+    with:
+      artifacts-name: "wheels"
+      wheelhouse-path: "wheelhouse/*"
+      build-commit: "v0.1.4"
 
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-
-      - uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Build Wheel
-        shell: bash -l {0}
-        run: |
-          # ref: https://github.com/buildout/buildout.wheel/issues/18#issuecomment-748858329
-          pip install "wheel==0.34.1"
-          pip install --upgrade pip
-          source .github/workflows/build.sh
-      - name: List files
-        shell: bash -l {0}
-        run : ls -la wheelhouse
-      - name: Upload Wheel
-        uses: actions/upload-artifact@v2
-        with:
-          name: wheel
-          path: wheelhouse/*
+  macos:
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
+    uses: ./.github/workflows/wheels-macos.yml
+    with:
+      artifacts-name: "wheels"
+      wheelhouse-path: "wheelhouse/*"
+      build-commit: "v0.1.4"
 
   collect-wheels:
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
     name: Collect Wheels
-    needs: build
+    needs: [linux, macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download all wheels
         uses: actions/download-artifact@v2
         with:
-          name: wheel
+          name: wheels
           path: "${{ env.WHEELHOUSE_DIR }}"
 
       - name: Contents of wheelhouse directory
