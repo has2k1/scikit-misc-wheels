@@ -1,6 +1,12 @@
 # Define custom utilities
 # Test for OSX with [ -n "$IS_OSX" ]
 # See env_vars.sh for extra environment variables
+
+# https://github.com/multi-build/multibuild/issues/470
+if [ $(uname) == "Linux" ]; then
+    IS_LINUX=1
+    ! git config --global --add safe.directory "*"
+fi
 source gfortran-install/gfortran_utils.sh
 
 # From https://github.com/MacPython/scipy-wheels
