@@ -1,0 +1,86 @@
+# https://github.com/numpy/numpy/blob/main/.github/workflows/wheels.yml
+name: Build macOS(arm64)  wheels
+
+env:
+  REPO_DIR: scikit-misc
+  CYTHON_BUILD_DEP: "Cython==0.29.24"
+  OTHER_TEST_DEPS: "pytest"
+
+on:
+  workflow_call:
+    inputs:
+      build-commit:
+        required: true
+        type: string
+      artifacts-name:
+        required: true
+        type: string
+      wheelhouse-path:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["macos-latest"]
+        gcc_v: [11] # Version of GFortran we want to use.
+        platform: ["arm64"]
+        python: ["38", "39", "310"]
+
+    env:
+      PLAT: ${{ matrix.platform }}
+      NP_BUILD_DEP: oldest-supported-numpy
+      NP_TEST_DEP: oldest-supported-numpy
+      BUILD_COMMIT: ${{ inputs.build-commit }}
+      FC: gfortran
+      GCC_V: ${{ matrix.gcc_v }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'has2k1/scikit-misc'
+          ref: ${{ inputs.build-commit }}
+          submodules: true
+
+      # Used to push the built wheels
+      - uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+
+      - name: Install GFortran macOS
+        run: |
+          ls -la /usr/local/bin/gfortran*
+          ln -s /usr/local/bin/gfortran-${GCC_V} /usr/local/bin/gfortran
+          which gfortran-${GCC_V}
+          which gfortran
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.6.0
+        with:
+          output-dir: ${{ inputs.wheelhouse-path }}
+        env:
+          CIBW_BUILD: "cp${{ matrix.python }}-macosx_${{ matrix.platform }}"
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.8"
+          CIBW_ARCHS: all
+          CIBW_TEST_COMMAND: python -c "import sys, skmisc; sys.exit(skmisc.test())"
+          CIBW_TEST_REQUIRES: "${{ env.OTHER_TEST_DEPS }}"
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_BEFORE_BUILD: >
+            python -m pip install "${{ env.CYTHON_BUILD_DEP }}" &&
+            python -m pip install oldest-supported-numpy &&
+            python -m pip list
+        # run: |
+        #   python -m cibuildwheel --output-dir ${{ inputs.wheelhouse-path }}
+
+      - name: List files
+        shell: bash -l {0}
+        run : ls -la wheelhouse
+
+      - name: Upload Wheel
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ inputs.artifacts-name }}
+          path: ${{ inputs.wheelhouse-path }}

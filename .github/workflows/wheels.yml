@@ -16,17 +16,25 @@ env:
   WHEELHOUSE_DIR: "${{ github.workspace }}/../wheelhouse"
 
 jobs:
-  linux:
-    if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
-    uses: ./.github/workflows/wheels-linux.yml
-    with:
-      artifacts-name: "wheels"
-      wheelhouse-path: "wheelhouse/*"
-      build-commit: "v0.1.4"
+  # linux:
+  #   if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
+  #   uses: ./.github/workflows/wheels-linux.yml
+  #   with:
+  #     artifacts-name: "wheels"
+  #     wheelhouse-path: "wheelhouse/*"
+  #     build-commit: "v0.1.4"
+  #
+  # macos:
+  #   if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
+  #   uses: ./.github/workflows/wheels-macos.yml
+  #   with:
+  #     artifacts-name: "wheels"
+  #     wheelhouse-path: "wheelhouse/*"
+  #     build-commit: "v0.1.4"
 
-  macos:
+  macosx_arm64:
     if: "!contains(github.event.head_commit.message, '[skip ci]') && always()"
-    uses: ./.github/workflows/wheels-macos.yml
+    uses: ./.github/workflows/wheels-macos_arm64.yml
     with:
       artifacts-name: "wheels"
       wheelhouse-path: "wheelhouse/*"
@@ -34,7 +42,8 @@ jobs:
 
   collect-wheels:
     name: Collect Wheels
-    needs: [linux, macos]
+    # needs: [linux, macos, macos-arm64]
+    needs: [macosx_arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Download all wheels
