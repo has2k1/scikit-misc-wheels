@@ -4,8 +4,6 @@ name: Build macOS  wheels
 env:
   REPO_DIR: scikit-misc
   CYTHON_BUILD_DEP: "Cython==0.29.24"
-  PYBIND11_BUILD_DEP: "pybind11>=2.4.3"
-  UNICODE_WIDTH: 32
   BUILD_DIR: ${{ github.workspace }}
   OTHER_TEST_DEPS: "pytest"
 
