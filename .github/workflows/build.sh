@@ -5,6 +5,19 @@
 
 BUILD_DEPENDS="$NP_BUILD_DEP $CYTHON_BUILD_DEP $PYBIND11_BUILD_DEP"
 TEST_DEPENDS="$NP_TEST_DEP $OTHER_TEST_DEPS"
+SKIP_TESTS=false
+UNAME=$(uname)
+NATIVE_PLAT=$(uname -m)
+
+# When crosspiling we cannot install the built wheel
+if [[ "$PLAT" != "$NATIVE_PLAT" ]]; then
+  SKIP_TESTS=true
+fi
+
+if [[ "$UNAME" == "Linux" ]]; then
+  # https://github.com/multi-build/multibuild/issues/470
+  ! git config --global --add safe.directory "*"
+fi
 
 echo "::group::Install a virtualenv"
   source multibuild/common_utils.sh
@@ -19,7 +32,7 @@ echo "::group::Build wheel"
   ls -l "${GITHUB_WORKSPACE}/${WHEEL_SDIR}/"
 echo "::endgroup::"
 
-if [[ $MACOSX_DEPLOYMENT_TARGET != "11.0" ]]; then
+if [[ "$SKIP_TESTS" == false ]]; then
   echo "::group::Test wheel"
     install_run $PLAT
   echo "::endgroup::"
