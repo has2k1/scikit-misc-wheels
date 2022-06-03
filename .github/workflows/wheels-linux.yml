@@ -4,15 +4,13 @@ name: Build Linux wheels
 env:
   REPO_DIR: scikit-misc
   CYTHON_BUILD_DEP: "Cython==0.29.24"
+  PYBIND11_BUILD_DEP: "pybind11>=2.4.3"
   BUILD_DIR: ${{ github.workspace }}
   OTHER_TEST_DEPS: "pytest"
 
 on:
   workflow_call:
     inputs:
-      build-commit:
-        required: true
-        type: string
       artifacts-name:
         required: true
         type: string
@@ -27,15 +25,14 @@ jobs:
       fail-fast: false
       matrix:
         platform: ["x86_64", "i686"]
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python: ["3.7", "3.8", "3.9", "3.10"]
 
     env:
       PLAT: ${{ matrix.platform }}
       TRAVIS_OS_NAME: "xenial"
-      MB_PYTHON_VERSION: ${{ matrix.python-version }}
+      MB_PYTHON_VERSION: ${{ matrix.python }}
       NP_BUILD_DEP: oldest-supported-numpy
       NP_TEST_DEP: oldest-supported-numpy
-      BUILD_COMMIT: "${{ inputs.build-commit }}"
 
     steps:
       - uses: actions/checkout@v3
@@ -44,7 +41,7 @@ jobs:
 
       - uses: actions/setup-python@v3
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python }}
 
       - name: Build Wheel
         shell: bash -l {0}
