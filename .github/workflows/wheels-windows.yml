@@ -1,0 +1,74 @@
+# https://github.com/numpy/numpy/blob/main/.github/workflows/wheels.yml
+name: Build windows wheels
+
+env:
+  REPO_DIR: scikit-misc
+  CYTHON_BUILD_DEP: "Cython==0.29.24"
+  OTHER_TEST_DEPS: "pytest"
+
+on:
+  workflow_call:
+    inputs:
+      artifacts-name:
+        required: true
+        type: string
+      wheelhouse-path:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["windows-2019"]
+        python: ["38", "39", "310"]
+        platform: ["win_amd64"]
+
+    env:
+      PLAT: ${{ matrix.platform }}
+      NP_BUILD_DEP: oldest-supported-numpy
+      NP_TEST_DEP: oldest-supported-numpy
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'has2k1/scikit-misc'
+          ref: 'v0.1.4'
+          submodules: true
+
+      # Used to push the built wheels
+      - uses: actions/setup-python@v3
+        with:
+          python-version: 3.10
+
+      - name: Enable Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.4.0
+        with:
+          output-dir: ${{ inputs.wheelhouse-path }}
+        env:
+          CIBW_BUILD: "cp${{ matrix.python }}-${{ matrix.platform }}"
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.8"
+          CIBW_TEST_COMMAND: python -c "import sys, skmisc; sys.exit(skmisc.test())"
+          CIBW_TEST_REQUIRES: "${{ env.OTHER_TEST_DEPS }}"
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_BEFORE_BUILD: >
+            python -m pip install "${{ env.CYTHON_BUILD_DEP }}" &&
+            python -m pip install oldest-supported-numpy &&
+            python -m pip list
+          CIBW_ENVIRONMENT_WINDOWS: >
+            CL=/std:c11
+
+      - name: List files
+        shell: bash -l {0}
+        run : ls -la wheelhouse
+
+      - name: Upload Wheel
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ inputs.artifacts-name }}
+          path: ${{ inputs.wheelhouse-path }}
