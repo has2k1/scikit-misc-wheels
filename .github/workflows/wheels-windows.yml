@@ -57,6 +57,7 @@ jobs:
         with:
           output-dir: ${{ inputs.wheelhouse-path }}
         env:
+          CC: gcc
           CIBW_BUILD: "cp${{ matrix.python }}-${{ matrix.platform }}"
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.8"
           CIBW_TEST_COMMAND: python -c "import sys, skmisc; sys.exit(skmisc.test())"
@@ -68,6 +69,8 @@ jobs:
             PATH="${PATH};${CONDA}\\condabin;${CONDA}\\Library\\bin"
             LIB="${LIB};${CMAKE_PREFIX_PATH}\\lib;${CONDA}\\Library\\lib"
             CPATH="${CPATH};${CMAKE_PREFIX_PATH}\\include;${CONDA}\\Library\\include"
+            CPATH="${CPATH};${LAPACK_LIBS};${BLAS_LIBS};${FLIBS}"
+
           # Install system dependencies
           CIBW_BEFORE_ALL: bash tools/build_${{ runner.os }}.sh
 
