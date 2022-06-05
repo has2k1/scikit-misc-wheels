@@ -1,4 +1,5 @@
 # https://github.com/numpy/numpy/blob/main/.github/workflows/wheels.yml
+# https://github.com/kyamagu/faiss-wheels/blob/main/.github/workflows/build.yml
 name: Build windows wheels
 
 env:
@@ -23,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["windows-2019"]
-        python: ["38", "39", "310"]
+        python: ["310"]
         platform: ["win_amd64"]
 
     env:
@@ -32,16 +33,24 @@ jobs:
       NP_TEST_DEP: oldest-supported-numpy
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout scikit-misc
+        uses: actions/checkout@v3
         with:
           repository: 'has2k1/scikit-misc'
           ref: 'v0.1.5alpha1'
-          submodules: true
 
       # Used to push the built wheels
-      - uses: actions/setup-python@v3
+      - name: Setup python
+        uses: actions/setup-python@v3
         with:
           python-version: "3.10"
+
+      - name: Working directory
+        shell: bash -l {0}
+        run: |
+          pwd
+          ls -la .
+          ls -la ../
 
       - name: Enable Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -57,11 +66,17 @@ jobs:
           CIBW_TEST_REQUIRES: "${{ env.OTHER_TEST_DEPS }}"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_BEFORE_BUILD: >
-            python -m pip install "${{ env.CYTHON_BUILD_DEP }}" &&
-            python -m pip install oldest-supported-numpy &&
+            python -m pip install "${{ env.CYTHON_BUILD_DEP }}"
+            python -m pip install oldest-supported-numpy
             python -m pip list
           CIBW_ENVIRONMENT_WINDOWS: >
             CL=/std:c11
+            CMAKE_PREFIX_PATH="c:\\opt"
+            PATH="${PATH};${CONDA}\\condabin;${CONDA}\\Library\\bin"
+            LIB="${LIB};${CMAKE_PREFIX_PATH}\\lib;${CONDA}\\Library\\lib"
+            CPATH="${CPATH};${CMAKE_PREFIX_PATH}\\include;${CONDA}\\Library\\include"
+          # Install system dependencies
+          CIBW_BEFORE_ALL: bash tools/build_${{ runner.os }}.sh
 
       - name: List files
         shell: bash -l {0}
