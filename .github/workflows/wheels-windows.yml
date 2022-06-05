@@ -4,7 +4,6 @@ name: Build windows wheels
 
 env:
   REPO_DIR: scikit-misc
-  CYTHON_BUILD_DEP: "Cython==0.29.24"
   OTHER_TEST_DEPS: "pytest"
 
 on:
@@ -29,8 +28,6 @@ jobs:
 
     env:
       PLAT: ${{ matrix.platform }}
-      NP_BUILD_DEP: oldest-supported-numpy
-      NP_TEST_DEP: oldest-supported-numpy
 
     steps:
       - name: Checkout scikit-misc
@@ -65,10 +62,6 @@ jobs:
           CIBW_TEST_COMMAND: python -c "import sys, skmisc; sys.exit(skmisc.test())"
           CIBW_TEST_REQUIRES: "${{ env.OTHER_TEST_DEPS }}"
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_BEFORE_BUILD: >
-            python -m pip install "${{ env.CYTHON_BUILD_DEP }}"
-            python -m pip install oldest-supported-numpy
-            python -m pip list
           CIBW_ENVIRONMENT_WINDOWS: >
             CL=/std:c11
             CMAKE_PREFIX_PATH="c:\\opt"
